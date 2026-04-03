@@ -31,12 +31,14 @@ def _db_save_message(room_id: str, user_id: str, display_name: str, avatar_url, 
 def register_chat_handlers(sio: socketio.AsyncServer):
 
     @sio.event
-    async def chat_message(sid, data):
+    async def send_chat(sid, data):
+        """Frontend emits 'send_chat' with { message: '...' }"""
         session = await sio.get_session(sid)
         if not session:
             return
 
-        content = (data.get("content") or "").strip()
+        # Accept both 'message' (new) and 'content' (legacy)
+        content = (data.get("message") or data.get("content") or "").strip()
         if not content or len(content) > 500:
             return
 
@@ -49,12 +51,16 @@ def register_chat_handlers(sio: socketio.AsyncServer):
         display_name = session.get("display_name", "Jammer")
         avatar_url = session.get("avatar_url")
 
-        # Run DB write in thread pool — keeps the event loop free
         msg_dict = await asyncio.to_thread(
             _db_save_message, room_id, user_id, display_name, avatar_url, content
         )
 
         await sio.emit("chat_message", msg_dict, room=room_id)
+
+    @sio.event
+    async def chat_message(sid, data):
+        """Alias — some older clients emit 'chat_message' directly."""
+        await send_chat(sid, data)
 
     @sio.event
     async def reaction(sid, data):
