@@ -10,7 +10,7 @@ class CreateRoomRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Room name")
     description: str = Field("", max_length=500, description="Room description")
     genre_tags: list[str] = Field(default_factory=list, max_length=5, description="Genre tags (max 5)")
-    queue_mode: str = Field("open", pattern="^(open|moderated)$", description="Queue mode: open or moderated")
+    queue_mode: str = Field("open", pattern="^(open|moderated|curated)$", description="Queue mode: open or curated")
     
     class Config:
         examples = [{
@@ -25,7 +25,7 @@ class UpdateRoomRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     genre_tags: Optional[list[str]] = Field(None, max_length=5)
-    queue_mode: Optional[str] = Field(None, pattern="^(open|moderated)$")
+    queue_mode: Optional[str] = Field(None, pattern="^(open|moderated|curated)$")
 
 
 # ---- Room Models ----
