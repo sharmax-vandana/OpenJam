@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://www.googleapis.com">
 
-  <link rel="stylesheet" href="/static/css/style.css?v=2">
+  <link rel="stylesheet" href="/static/css/style.css?v=3">
 </head>
 <body>
 
@@ -184,8 +184,27 @@
 
 </div><!-- /room-grid -->
 
+<!-- ══ MOBILE BOTTOM TABS ══════════════════════════════════ -->
+<!-- Only visible on mobile (≤640px via CSS) -->
+<nav class="mobile-bottom-tabs" id="mob-tabs" aria-label="Room navigation">
+  <button class="mob-tab active" id="mob-tab-queue" onclick="switchMobileTab('queue')" aria-label="Queue">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+    <span class="mob-tab-label">Queue</span>
+  </button>
+  <button class="mob-tab" id="mob-tab-chat" onclick="switchMobileTab('chat')" aria-label="Chat">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+    <span class="mob-tab-badge" id="mob-chat-badge" style="display:none">0</span>
+    <span class="mob-tab-label">Chat</span>
+  </button>
+  <button class="mob-tab" id="mob-tab-members" onclick="switchMobileTab('members')" aria-label="Members">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+    <span class="mob-tab-label">People</span>
+  </button>
+</nav>
+
 <!-- Toast stack -->
 <div class="toast-stack" id="toasts"></div>
+
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="/config.js"></script>
@@ -205,6 +224,55 @@ function toast(msg,type='info'){
   $('#toasts').appendChild(el); setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(20px)'; el.style.transition='all 0.3s'; setTimeout(()=>el.remove(),300); },3500);
 }
 function toggleMembers(){ $('#members-panel')?.classList.toggle('collapsed'); }
+
+/* ── Mobile tab switching ──────────────────────────────────── */
+let _mobUnread = 0;
+function switchMobileTab(tab) {
+  const centre  = $('#panel-center');
+  const right   = $('#panel-right');
+  const qTab    = $('#mob-tab-queue');
+  const cTab    = $('#mob-tab-chat');
+  const mTab    = $('#mob-tab-members');
+
+  // Deactivate all
+  [qTab, cTab, mTab].forEach(t => t?.classList.remove('active'));
+  centre?.classList.remove('mobile-active');
+  right?.classList.remove('mobile-active');
+
+  if (tab === 'queue') {
+    qTab?.classList.add('active');
+    centre?.classList.add('mobile-active');
+  } else if (tab === 'chat') {
+    cTab?.classList.add('active');
+    right?.classList.add('mobile-active');
+    // Collapse members so chat is visible
+    $('#members-panel')?.classList.add('collapsed');
+    // Clear unread badge
+    _mobUnread = 0;
+    const badge = $('#mob-chat-badge');
+    if (badge) badge.style.display = 'none';
+    // Scroll chat to bottom
+    const msgs = $('#chat-msgs');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+  } else if (tab === 'members') {
+    mTab?.classList.add('active');
+    right?.classList.add('mobile-active');
+    // Expand members list
+    $('#members-panel')?.classList.remove('collapsed');
+  }
+}
+
+/* Track unread messages when chat panel is not active */
+function _mobMarkUnread() {
+  if (window.innerWidth > 640) return;
+  const cTab = $('#mob-tab-chat');
+  if (!cTab?.classList.contains('active')) {
+    _mobUnread++;
+    const badge = $('#mob-chat-badge');
+    if (badge) { badge.textContent = _mobUnread > 9 ? '9+' : _mobUnread; badge.style.display = 'flex'; }
+  }
+}
+
 </script>
 <script src="/static/js/youtube-player.js"></script>
 <script src="/static/js/socket-client.js"></script>
@@ -547,6 +615,8 @@ function toggleMembers(){ $('#members-panel')?.classList.toggle('collapsed'); }
       </div>`;
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
+    // Mobile: show unread badge if chat panel is not active
+    if (!isSelf) _mobMarkUnread();
   }
   function sendMsg(){ const v=$('#chat-input').value.trim(); if(v){ sc.sendChat(v); $('#chat-input').value=''; } }
   $('#btn-send')?.addEventListener('click', sendMsg);
