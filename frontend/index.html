@@ -123,6 +123,20 @@
     </div>
   </div>
 
+  <!-- Leave Session Modal -->
+  <div class="modal-bg" id="leave-modal">
+    <div class="modal-box" style="max-width: 400px; text-align: center;">
+      <div class="modal-title" style="margin-bottom: 8px;">Leave Session?</div>
+      <p style="color: var(--text-2); margin-bottom: 24px; font-size: 14px;">
+        You will be seamlessly removed from any active rooms. Are you sure you want to log out?
+      </p>
+      <div class="modal-actions" style="justify-content: center;">
+        <button class="btn btn-secondary" id="btn-leave-cancel">Stay</button>
+        <button class="btn btn-primary" id="btn-leave-confirm" style="background: #e11d48; color: #fff;">Yes, Leave</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast stack -->
   <div class="toast-stack" id="toasts"></div>
 
@@ -193,10 +207,21 @@
       });
       $('#join-name').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#btn-join').click(); });
       
-      $('#btn-logout').addEventListener('click', async ()=>{
-        if(!confirm('Leaving session? you will be removed from any active rooms.')) return;
+      $('#btn-logout').addEventListener('click', ()=>{
+        $('#leave-modal').classList.add('active');
+      });
+
+      $('#btn-leave-cancel').addEventListener('click', ()=>{
+        $('#leave-modal').classList.remove('active');
+      });
+
+      $('#btn-leave-confirm').addEventListener('click', async ()=>{
+        $('#btn-leave-confirm').disabled = true;
+        $('#btn-leave-confirm').textContent = 'Leaving...';
         localStorage.removeItem('openjam_display_name');
-        await fetch('/auth/logout', { method:'POST', credentials:'include' });
+        try {
+          await fetch('/auth/logout', { method:'POST', credentials:'include' });
+        } catch(e) {}
         location.reload();
       });
 
