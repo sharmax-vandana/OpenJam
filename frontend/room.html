@@ -348,8 +348,10 @@ function _mobMarkUnread() {
   const sc = new SocketClient();
   sc.on('playback_sync',  d => {
     if (d?.track_uri) {
-      updateNP(d);                              // show track info / art immediately
-      yt.syncPosition(d.position_ms, d.is_playing); // this will show overlay if needed
+      if (!isHost) {
+        updateNP(d);
+        yt.syncPosition(d.position_ms, d.is_playing);
+      }
     }
   });
   sc.on('track_changed',  d => { updateNP(d); if(d) toast(`▶ ${d.track_name}`, 'success'); });
@@ -494,7 +496,7 @@ function _mobMarkUnread() {
   function renderQueue(q){
     const list = $('#queue-list');
     const empty = $('#q-empty');
-    const pending = (q||[]).filter(i=>i.status!=='played');
+    const pending = (q||[]).filter(i=>i.status==='pending');
     $('#q-count').textContent = `${pending.length} track${pending.length!==1?'s':''}`;
 
     if(!pending.length){ list.innerHTML=''; list.appendChild(empty); empty.style.display='flex'; return; }
@@ -520,7 +522,7 @@ function _mobMarkUnread() {
       </div>`;
     }).join('');
   }
-  window.doVote = id => sc.voteTrack(id);
+  window.doVote = id => sc.emit('vote_track', { room_id: roomId, queue_item_id: id });
 
   /* ─── Members ────────────────────────────────────────── */
   function updateMembers(listeners){
@@ -649,7 +651,7 @@ function _mobMarkUnread() {
         toast('Finding on YouTube… 🎵','info');
         const vid = await resolveYT(el.dataset.uri);
         if(!vid){ toast('Not found on YouTube. Try another.','error'); return; }
-        sc.addToQueue({ track_uri:vid, track_name:el.dataset.name, artist:el.dataset.artist, album_art_url:el.dataset.art, duration_ms:parseInt(el.dataset.dur)||0 });
+        sc.emit('add_to_queue', { room_id:roomId, track_uri:vid, track_name:el.dataset.name, artist:el.dataset.artist, album_art_url:el.dataset.art, duration_ms:parseInt(el.dataset.dur)||0 });
         toast(`Queued: ${el.dataset.name}`, 'success');
       });
     });
