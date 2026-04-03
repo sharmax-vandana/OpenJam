@@ -220,6 +220,20 @@
   </button>
 </nav>
 
+<!-- Close Room Modal -->
+<div class="modal-bg" id="close-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="modal-box" style="background: var(--bg-1); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div class="modal-title" style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">Close Room?</div>
+    <p style="color: var(--text-2); margin-bottom: 24px; font-size: 14px;">
+      This will permanently close the room for everyone currently inside. Are you sure?
+    </p>
+    <div class="modal-actions" style="display: flex; gap: 12px; justify-content: center;">
+      <button class="btn btn-secondary" id="btn-close-cancel">Cancel</button>
+      <button class="btn" id="btn-close-confirm" style="background: #e11d48; color: #fff;">Close Room</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast stack -->
 <div class="toast-stack" id="toasts"></div>
 
@@ -662,11 +676,28 @@ function _mobMarkUnread() {
   });
   $('#btn-next')?.addEventListener('click', ()=>{ if(isHost) sc.nextTrack(); });
   $('#btn-prev')?.addEventListener('click', ()=>{ if(isHost) sc.emit('prev_track', { room_id:roomId }); });
-  $('#btn-close')?.addEventListener('click', async ()=>{
-    if(!confirm('Close this room for everyone?')) return;
+  $('#btn-close')?.addEventListener('click', ()=>{
+    const modal = document.getElementById('close-modal');
+    modal.style.display = 'flex';
+  });
+
+  document.getElementById('btn-close-cancel')?.addEventListener('click', ()=>{
+    const modal = document.getElementById('close-modal');
+    modal.style.display = 'none';
+  });
+
+  document.getElementById('btn-close-confirm')?.addEventListener('click', async ()=>{
+    const confirmBtn = document.getElementById('btn-close-confirm');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Closing...';
     const r = await fetch(`/rooms/${roomId}`, { method:'DELETE', credentials:'include' });
     if(r.ok){ toast('Room closed','success'); setTimeout(()=>location.href='/',1500); }
-    else toast('Failed to close room','error');
+    else {
+      toast('Failed to close room','error');
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Close Room';
+      document.getElementById('close-modal').style.display = 'none';
+    }
   });
 
   $('#btn-invite')?.addEventListener('click', async ()=>{
