@@ -535,43 +535,55 @@ function _mobMarkUnread() {
   /* ─── Queue ──────────────────────────────────────────── */
   function renderQueue(q){
     const list = $('#queue-list');
-    const empty = $('#q-empty');
-    const pending = (q||[]).filter(i=>i.status!=='played');
-    $('#q-count').textContent = `${pending.length} track${pending.length!==1?'s':''}`;
+    if(!list) return;
+    const allItems = (q||[]).filter(i => i.status !== 'played');
+    $('#q-count').textContent = `${allItems.length} track${allItems.length !== 1 ? 's' : ''}`;
 
-    if(!pending.length){ list.innerHTML=''; list.appendChild(empty); empty.style.display='flex'; return; }
-    empty.style.display='none';
+    if(!allItems.length){
+      list.innerHTML = `
+        <div class="empty" id="q-empty">
+          <div class="empty-icon">🎶</div>
+          <div class="empty-title">Queue is empty</div>
+          <div class="empty-sub">Search above to add a track</div>
+        </div>`;
+      return;
+    }
 
-    // Separate playing from pending for rendering order
-    const playing = pending.filter(i=>i.status==='playing');
-    const queued  = pending.filter(i=>i.status!=='playing');
+    // Playing first, then pending sorted by votes/position
+    const playing = allItems.filter(i => i.status === 'playing');
+    const queued  = allItems.filter(i => i.status !== 'playing');
+    const ordered = [...playing, ...queued];
 
-    list.innerHTML = [...playing, ...queued].map((item, idx)=>{
-      const isPlaying = item.status==='playing';
-      const voted = me && (item.voter_ids||[]).includes(me.id);
-      const pos = isPlaying ? '' : `#${idx + (playing.length ? 0 : 1)}`;
-      const dur = item.duration_ms && item.duration_ms > 0 ? fmt(item.duration_ms) : '';
+    list.innerHTML = ordered.map((item, idx) => {
+      const isPlaying = item.status === 'playing';
+      const voted = me && (item.voter_ids || []).includes(me.id);
+      const qNum = isPlaying ? '' : `#${idx - playing.length + 1}`;
+      const dur  = item.duration_ms > 0 ? fmt(item.duration_ms) : '';
+      const art  = item.album_art_url || '';
       return `
-      <div class="queue-item ${isPlaying?'playing':''}" data-id="${item.id}">
-        <img class="queue-item-art" src="${esc(item.album_art_url||'')}" alt="" onerror="this.src=''">
+      <div class="queue-item${isPlaying ? ' playing' : ''}" data-id="${esc(item.id)}">
+        <img class="queue-item-art" src="${esc(art)}" alt="" onerror="this.src=''">
         <div class="queue-item-info">
-          <div class="queue-item-name">${esc(item.track_name)}</div>
-          <div class="queue-item-artist">${esc(item.artist)}</div>
+          <div class="queue-item-name">${esc(item.track_name || 'Unknown')}</div>
+          <div class="queue-item-artist">${esc(item.artist || '')}</div>
           <div class="queue-item-meta">
             ${isPlaying
-              ? `<span class="queue-now-badge">▶ NOW PLAYING</span>`
-              : `<span class="queue-item-num">${pos}</span>`}
-            ${dur ? `<span class="queue-item-dur">${esc(dur)}</span>` : ''}
-            <span class="queue-item-by">${esc(item.added_by_name||'Unknown')}</span>
+              ? `<span class="queue-now-badge">&#9654; NOW PLAYING</span>`
+              : `<span class="queue-item-num">${qNum}</span>`}
+            ${dur ? `<span class="queue-item-dur">${dur}</span>` : ''}
+            <span class="queue-item-by">${esc(item.added_by_name || 'Unknown')}</span>
           </div>
         </div>
         ${isPlaying
           ? `<div class="eq"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>`
-          : `<button class="vote-btn ${voted?'voted':''}" onclick="doVote('${item.id}')" ${voted?'disabled':''}>
+          : `<button class="vote-btn${voted ? ' voted' : ''}" onclick="doVote('${esc(item.id)}')" ${voted ? 'disabled' : ''}>
                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l7 7H5z"/></svg>
-               ${item.votes||0}
+               ${item.votes || 0}
              </button>`}
       </div>`;
+    }).join('');
+  }
+
     }).join('');
   }
   window.doVote = id => sc.emit('vote_track', { room_id: roomId, queue_item_id: id });
