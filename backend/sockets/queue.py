@@ -9,8 +9,16 @@ from backend.services.queue_manager import queue_manager
 
 def _db_add_and_get_queue(room_id: str, track_data: dict, user_id: str, display_name: str):
     """Add a track and get current queue — runs in thread pool."""
+    from backend.models.room import Room
     db = SessionLocal()
     try:
+        # Check queue mode permissions
+        room = db.query(Room).filter(Room.id == room_id).first()
+        if not room:
+            raise ValueError("Room not found")
+        if room.queue_mode == "curated" and room.host_user_id != user_id:
+            raise ValueError("Queue is locked by host")
+
         queue_manager.add_track(db, room_id, track_data, user_id, display_name)
         now_playing = queue_manager.get_now_playing(db, room_id)
         next_item = None
@@ -71,6 +79,9 @@ def register_queue_handlers(sio: socketio.AsyncServer):
             queue, next_item = await asyncio.to_thread(
                 _db_add_and_get_queue, room_id, track_data, user_id, display_name
             )
+        except ValueError as ve:
+            await sio.emit("queue_error", {"message": str(ve)}, to=sid)
+            return
         except Exception as e:
             print(f"[queue] add_to_queue error: {e}")
             return

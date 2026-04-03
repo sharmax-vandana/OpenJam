@@ -55,3 +55,16 @@ def register_chat_handlers(sio: socketio.AsyncServer):
         )
 
         await sio.emit("chat_message", msg_dict, room=room_id)
+
+    @sio.event
+    async def reaction(sid, data):
+        """Micro-chat: broadcast an emoji reaction to the room."""
+        emoji = data.get("emoji")
+        if not emoji:
+            return
+        
+        info = room_manager.get_user_by_sid(sid)
+        if not info:
+            return
+            
+        await sio.emit("room_reaction", {"emoji": emoji[:2]}, room=info["room_id"])

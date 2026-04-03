@@ -18,6 +18,10 @@
   <link rel="stylesheet" href="/static/css/style.css?v=3">
 </head>
 <body>
+  <!-- Dynamic Audio-Visual Backdrop -->
+  <div class="dynamic-bg-wrapper">
+    <img id="dynamic-bg" class="dynamic-bg" src="" alt="">
+  </div>
 
 <!-- Ambient background blur -->
 <div class="room-ambient" id="room-ambient"></div>
@@ -112,6 +116,14 @@
       <div class="controls-locked" id="controls-locked">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M12 1C8.676 1 6 3.676 6 7v1H4v15h16V8h-2V7c0-3.324-2.676-6-6-6zm0 2c2.276 0 4 1.724 4 4v1H8V7c0-2.276 1.724-4 4-4zm0 9a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg>
         Host controls playback
+      </div>
+
+      <!-- Reactions -->
+      <div class="reaction-container" id="reaction-tray">
+        <button class="btn-reaction" data-emoji="❤️" title="Love">❤️</button>
+        <button class="btn-reaction" data-emoji="🔥" title="Fire">🔥</button>
+        <button class="btn-reaction" data-emoji="🕺" title="Vibe">🕺</button>
+        <button class="btn-reaction" data-emoji="🧊" title="Chill">🧊</button>
       </div>
     </div>
 
@@ -341,9 +353,11 @@ function _mobMarkUnread() {
     if(mobTab){ const lbl = mobTab.querySelector('.mob-tab-label'); if(lbl) lbl.textContent = count > 0 ? `People (${count})` : 'People'; }
     if(d.listeners) updateMembers(d.listeners);
   });
+  sc.on('room_reaction',  d => { if(d.emoji) spawnEmoji(d.emoji); });
   sc.on('user_joined',    d => toast(`🎧 ${d.display_name} joined`, 'info'));
   sc.on('user_left',      d => toast(`${d.display_name} left`, 'info'));
   sc.on('room_closed',    d => { toast(d?.reason || 'Room closed', 'info'); setTimeout(()=>location.href='/', 2500); });
+  sc.on('queue_error',    d => toast(d.message || 'Action blocked', 'error'));
 
   /* ─── Auth ───────────────────────────────────────────── */
   async function checkAuth(){
@@ -408,6 +422,8 @@ function _mobMarkUnread() {
       $('#np-title').textContent = 'Nothing playing';
       $('#np-artist').textContent = 'Add a track to the queue';
       artImg.src = BLANK;
+      const dynBg = $('#dynamic-bg');
+      if(dynBg) { dynBg.src = ''; dynBg.classList.remove('active'); }
       artImg.classList.remove('spinning'); vinyl.classList.remove('spinning');
       if(eq) eq.style.display='none';
       if(ambient) ambient.classList.remove('active');
@@ -422,6 +438,8 @@ function _mobMarkUnread() {
     $('#np-artist').textContent = track.artist || '';
     if(track.album_art_url && track.album_art_url !== artImg.src){
       artImg.src = track.album_art_url;
+      const dynBg = $('#dynamic-bg');
+      if(dynBg) { dynBg.src = track.album_art_url; dynBg.classList.add('active'); }
       if(ambient){ ambient.style.backgroundImage=`url(${track.album_art_url})`; ambient.classList.add('active'); }
     }
 
@@ -531,6 +549,51 @@ function _mobMarkUnread() {
   /* ─── Track Search ───────────────────────────────────── */
   const qSearch = $('#q-search');
   const srEl = $('#search-results');
+
+  // Check if guest is allowed to add to queue (Party Mode vs Dictator)
+  function checkQueuePermissions() {
+    if(!isHost && roomData?.room?.queue_mode === 'curated') {
+      const wrap = $('#q-search-wrap');
+      if(wrap) {
+        wrap.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:13px;background:var(--bg-elevated);border-radius:var(--r-md);">
+          <div style="font-size:24px;margin-bottom:4px">🔒</div>
+          The host has locked the queue
+        </div>`;
+      }
+    }
+  }
+
+  /* ─── Reactions ────────────────────────────────────────── */
+  $$('.btn-reaction').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const emoji = btn.dataset.emoji;
+      sc.emit('reaction', { room_id: roomId, emoji });
+    });
+  });
+
+  function spawnEmoji(emoji) {
+    const el = document.createElement('div');
+    el.className = 'floating-emoji';
+    el.textContent = emoji;
+    
+    // Randomize starting X position and animation duration slightly
+    const randomX = Math.floor(Math.random() * 80) - 40; // -40px to +40px from center
+    const randomDur = 2 + Math.random(); // 2s to 3s
+    
+    // Spawn roughly above the reaction tray (center-left on desktop, bottom-right on mobile)
+    const isMobile = window.innerWidth <= 640;
+    if (isMobile) {
+      el.style.right = (32 + Math.random()*20) + 'px';
+      el.style.bottom = '80px';
+    } else {
+      el.style.left = (300 + randomX) + 'px'; // Assuming tray is roughly here
+      el.style.bottom = '80px';
+    }
+    
+    el.style.animation = `floatUp ${randomDur}s cubic-bezier(0.2, 0.8, 0.2, 1) forwards`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), randomDur * 1000);
+  }
 
   async function searchTracks(q){
     const r = await fetch(`/search/tracks?q=${encodeURIComponent(q)}`, { credentials:'include' });
@@ -661,6 +724,7 @@ function _mobMarkUnread() {
   /* ─── Init ───────────────────────────────────────────── */
   await checkAuth();
   await loadRoom();
+  checkQueuePermissions();
   sc.connect();
   sc.joinRoom(roomId);
 

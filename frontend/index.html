@@ -109,6 +109,13 @@
           <div class="tag" data-tag="chill">chill</div>
         </div>
       </div>
+      <div class="modal-field">
+        <label class="modal-label">Queue Mode</label>
+        <select class="input-field" id="create-mode" style="cursor:pointer">
+          <option value="open">🎉 Open Party (Anyone can add tracks)</option>
+          <option value="curated">🎧 DJ Only (Only you can add tracks)</option>
+        </select>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" id="btn-create-cancel">Cancel</button>
         <button class="btn btn-primary" id="btn-create-submit">Start Jamming</button>
@@ -278,6 +285,7 @@
         const btn = $('#btn-create-submit');
         const name = $('#create-name').value.trim();
         const desc = $('#create-desc').value.trim();
+        const mode = $('#create-mode').value;
         
         if(!name) return toast('Room name is required', 'error');
         btn.disabled = true; btn.textContent = 'Creating...';
@@ -285,7 +293,7 @@
         try {
           const r = await fetch('/rooms', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description:desc, tags:Array.from(selectedTags), is_private:false }),
+            body: JSON.stringify({ name, description:desc, tags:Array.from(selectedTags), is_private:false, queue_mode:mode }),
             credentials: 'include'
           });
           if(r.ok){
