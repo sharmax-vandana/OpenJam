@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://www.googleapis.com">
-  <link rel="stylesheet" href="/static/css/style.css?v=2">
+  <link rel="stylesheet" href="/static/css/style.css?v=3">
 </head>
 <body>
 
@@ -201,13 +201,6 @@
           const data = await r.json();
           rooms = data.rooms || [];
           renderRooms(rooms);
-          
-          if(data.listener_counts){
-            Object.entries(data.listener_counts).forEach(([rid, count]) => {
-              const el = $(`#lc-${rid}`);
-              if(el) el.textContent = count;
-            });
-          }
         } catch(e){ console.error(e); }
       }
 
@@ -243,7 +236,8 @@
               </div>
               <div class="room-listeners">
                 <div class="room-listeners-dot"></div>
-                <span id="lc-${r.id}">0</span>
+                <span>${r.listener_count ?? 0}</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="opacity:.7"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
               </div>
             </div>
             <div class="room-card-tags">
@@ -310,7 +304,7 @@
       // Let's go
       await checkAuth();
       await loadRooms();
-      setInterval(loadRooms, 15000); // refresh every 15s
+      setInterval(loadRooms, 5000); // 5s = near real-time listener counts
     })();
   </script>
 </body>

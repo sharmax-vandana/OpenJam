@@ -44,6 +44,12 @@
       <div class="room-bar-name" id="bar-name">Loading…</div>
       <div class="room-bar-host" id="bar-host"></div>
     </div>
+    <!-- Live listener count pill -->
+    <div class="room-listeners" id="bar-listener-count" style="margin-left:8px">
+      <div class="room-listeners-dot"></div>
+      <span id="bar-lc-num">0</span>
+      <span style="font-size:10px;font-weight:500;opacity:0.8">listening</span>
+    </div>
   </div>
   <div class="room-bar-right">
     <button class="btn btn-secondary" id="btn-invite" style="font-size:12px">
@@ -324,7 +330,17 @@ function _mobMarkUnread() {
   sc.on('queue_updated',  d => renderQueue(d.queue));
   sc.on('chat_message',   d => addChat(d));
   sc.on('chat_history',   d => { if(d.messages?.length) d.messages.forEach(addChat); });
-  sc.on('listener_count', d => updateMembers(d.listeners ?? d.count ?? []));
+  sc.on('listener_count', d => {
+    // Server sends either { listeners: [...] } or { count: N } or both
+    const barNum = $('#bar-lc-num');
+    const badge  = $('#m-count');
+    const count  = d.listeners ? d.listeners.length : (d.count ?? 0);
+    if(barNum) barNum.textContent = count;
+    if(badge)  badge.textContent  = count;
+    const mobTab = $('#mob-tab-members');
+    if(mobTab){ const lbl = mobTab.querySelector('.mob-tab-label'); if(lbl) lbl.textContent = count > 0 ? `People (${count})` : 'People'; }
+    if(d.listeners) updateMembers(d.listeners);
+  });
   sc.on('user_joined',    d => toast(`🎧 ${d.display_name} joined`, 'info'));
   sc.on('user_left',      d => toast(`${d.display_name} left`, 'info'));
   sc.on('room_closed',    d => { toast(d?.reason || 'Room closed', 'info'); setTimeout(()=>location.href='/', 2500); });
@@ -480,8 +496,23 @@ function _mobMarkUnread() {
     const badge = $('#m-count');
     if(!list) return;
     const arr = Array.isArray(listeners) ? listeners : [];
-    if(badge) badge.textContent = arr.length;
+    const count = typeof listeners === 'number' ? listeners : arr.length;
 
+    // Update sidebar badge
+    if(badge) badge.textContent = count;
+
+    // Update room bar live listener pill
+    const barNum = $('#bar-lc-num');
+    if(barNum) barNum.textContent = count;
+
+    // Update mobile People tab label
+    const mobTab = $('#mob-tab-members');
+    if(mobTab) {
+      const lbl = mobTab.querySelector('.mob-tab-label');
+      if(lbl) lbl.textContent = count > 0 ? `People (${count})` : 'People';
+    }
+
+    if(!Array.isArray(arr) || !arr.length) return;
     list.innerHTML = arr.map(l => {
       const isSelf = me && l.user_id===me.id;
       const isRoomHost = roomData && l.user_id===roomData.room?.host_user_id;
