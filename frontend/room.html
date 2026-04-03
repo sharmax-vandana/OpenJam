@@ -419,7 +419,7 @@ function toggleMembers(){ $('#members-panel')?.classList.toggle('collapsed'); }
   const srEl = $('#search-results');
 
   async function searchTracks(q){
-    const r = await fetch(`/search?q=${encodeURIComponent(q)}`, { credentials:'include' });
+    const r = await fetch(`/search/tracks?q=${encodeURIComponent(q)}`, { credentials:'include' });
     if(!r.ok) return [];
     return (await r.json()).tracks || [];
   }

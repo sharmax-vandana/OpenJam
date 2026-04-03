@@ -13,8 +13,8 @@ def register_chat_handlers(sio: socketio.AsyncServer):
         print(f"[chat] Received send_chat from {sid} with data: {data}")
         session = await sio.get_session(sid)
         print(f"[chat] Session for {sid}: {session}")
-        if not session or session.get("is_guest"):
-            print(f"[chat] Rejected: guest or no session")
+        if not session:
+            print(f"[chat] Rejected: no session")
             return
 
         # room_id from payload first, fallback to room_manager
