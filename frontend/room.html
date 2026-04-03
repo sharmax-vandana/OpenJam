@@ -314,7 +314,12 @@ function _mobMarkUnread() {
 
   /* ─── Socket ─────────────────────────────────────────── */
   const sc = new SocketClient();
-  sc.on('playback_sync',  d => { if(d?.track_uri){ updateNP(d); yt.syncPosition(d.position_ms, d.is_playing); } });
+  sc.on('playback_sync',  d => {
+    if (d?.track_uri) {
+      updateNP(d);                              // show track info / art immediately
+      yt.syncPosition(d.position_ms, d.is_playing); // this will show overlay if needed
+    }
+  });
   sc.on('track_changed',  d => { updateNP(d); if(d) toast(`▶ ${d.track_name}`, 'success'); });
   sc.on('queue_updated',  d => renderQueue(d.queue));
   sc.on('chat_message',   d => addChat(d));
