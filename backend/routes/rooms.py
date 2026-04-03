@@ -31,16 +31,29 @@ async def list_rooms(
 
     listener_counts = room_manager.get_listener_counts()
     result = []
+    
+    # Current time for checking new empty rooms 
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    
     for room in rooms:
+        count = listener_counts.get(room.id, 0)
+        
+        # Hide empty rooms unless they were just created (< 15 seconds ago) 
+        # to prevent ghost rooms from showing up on the home page while pending deletion
+        age_seconds = (now - room.created_at.replace(tzinfo=timezone.utc)).total_seconds()
+        if count == 0 and age_seconds > 15:
+            continue
+            
         host_name = room.host.display_name if room.host else "Unknown"
         now_playing = queue_manager.get_now_playing(db, room.id)
         result.append(room.to_dict(
-            listener_count=listener_counts.get(room.id, 0),
+            listener_count=count,
             current_track=now_playing,
             host_name=host_name,
         ))
     result.sort(key=lambda r: r["listener_count"], reverse=True)
-    return {"rooms": result, "total": total}
+    return {"rooms": result, "total": len(result)}
 
 
 @router.post("")
