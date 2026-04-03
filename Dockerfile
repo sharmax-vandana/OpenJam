@@ -30,9 +30,7 @@ COPY . .
 # Create logs directory
 RUN mkdir -p logs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+# Health check removed for native PaaS handling
 
 # Expose port
 EXPOSE 8000
