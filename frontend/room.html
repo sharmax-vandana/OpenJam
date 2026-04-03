@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room — Open Jam</title>
+  <meta name="description" content="Join this listening room and discover music together.">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- Ambient background blur -->
+<div class="room-ambient" id="room-ambient"></div>
+
+<!-- ══ NAVBAR ══════════════════════════════════════════════ -->
+<nav class="navbar">
+  <a href="/" class="navbar-brand">
+    <div class="navbar-vinyl"></div>
+    <div class="navbar-logo">Open<span>Jam</span></div>
+  </a>
+  <div class="navbar-right" id="navbar-right" style="display:none">
+    <div class="navbar-user">
+      <div class="avatar" id="nav-avatar">?</div>
+      <span id="nav-name"></span>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ ROOM INFO BAR ═══════════════════════════════════════ -->
+<div class="room-bar" id="room-bar" style="display:none">
+  <div class="room-bar-left">
+    <div class="badge badge-live"><div class="badge-live-dot"></div>LIVE</div>
+    <div>
+      <div class="room-bar-name" id="bar-name">Loading…</div>
+      <div class="room-bar-host" id="bar-host"></div>
+    </div>
+  </div>
+  <div class="room-bar-right">
+    <button class="btn btn-secondary" id="btn-invite" style="font-size:12px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:2px"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg> 
+      Invite
+    </button>
+    <a href="/" class="btn btn-ghost" style="font-size:12px">← All Rooms</a>
+    <button class="btn btn-danger" id="btn-close" style="display:none;font-size:12px">Close Room</button>
+  </div>
+</div>
+
+<!-- ══ ROOM GRID ═══════════════════════════════════════════ -->
+<div class="room-grid" id="room-grid">
+
+  <!-- LEFT — Now Playing -->
+  <div class="panel-left" id="panel-left">
+    <div class="np-top">
+      <div class="np-label">
+        <div class="eq" id="np-eq" style="display:none">
+          <div class="eq-bar"></div><div class="eq-bar"></div>
+          <div class="eq-bar"></div><div class="eq-bar"></div>
+        </div>
+        <span>Now Playing</span>
+      </div>
+
+      <div class="art-wrap">
+        <div class="art-vinyl" id="art-vinyl"></div>
+        <img class="art-img" id="art-img"
+          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3C/svg%3E"
+          alt="Album art">
+      </div>
+
+      <div class="np-title" id="np-title">Nothing playing</div>
+      <div class="np-artist" id="np-artist">Add a track to the queue</div>
+
+      <div class="np-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress" style="width:0%"></div>
+        </div>
+        <div class="np-times">
+          <span id="time-cur">0:00</span>
+          <span id="time-dur">0:00</span>
+        </div>
+      </div>
+
+      <!-- HOST-ONLY controls -->
+      <div class="controls-row" id="controls-row" style="display:none">
+        <button class="icon-btn" id="btn-prev" title="Previous">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6 8.5 6V6L9.5 12z"/></svg>
+        </button>
+        <button class="icon-btn primary" id="btn-play" title="Play / Pause">
+          <svg id="ico-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="ico-pause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-next" title="Skip">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg>
+        </button>
+      </div>
+      <!-- MEMBER info (non-host) -->
+      <div class="controls-locked" id="controls-locked">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M12 1C8.676 1 6 3.676 6 7v1H4v15h16V8h-2V7c0-3.324-2.676-6-6-6zm0 2c2.276 0 4 1.724 4 4v1H8V7c0-2.276 1.724-4 4-4zm0 9a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg>
+        Host controls playback
+      </div>
+    </div>
+
+    <!-- Volume (everyone) -->
+    <div class="volume-row">
+      <span class="vol-icon" id="vol-icon">
+        <svg id="ico-vol" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <svg id="ico-mute" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/></svg>
+      </span>
+      <input type="range" class="vol-slider" id="vol-slider" min="0" max="100" value="80">
+      <span class="vol-pct" id="vol-pct">80%</span>
+    </div>
+
+    <!-- Hidden YouTube player -->
+    <div id="yt-container" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0"></div>
+  </div>
+
+  <!-- CENTER — Queue -->
+  <div class="panel-center" id="panel-center">
+    <div class="queue-header">
+      <div class="queue-header-top">
+        <div class="queue-title">Queue</div>
+        <span class="queue-count" id="q-count">0 tracks</span>
+      </div>
+      <div class="queue-search-wrap" id="q-search-wrap">
+        <div class="input-with-icon">
+          <span class="icon-prefix">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          </span>
+          <input type="text" class="input-field" id="q-search" placeholder="Search for any track…" autocomplete="off">
+        </div>
+        <div class="search-results" id="search-results"></div>
+      </div>
+    </div>
+    <div class="queue-list" id="queue-list">
+      <div class="empty" id="q-empty">
+        <div class="empty-icon">🎶</div>
+        <div class="empty-title">Queue is empty</div>
+        <div class="empty-sub">Search above to add a track</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT — Members + Chat -->
+  <div class="panel-right" id="panel-right">
+
+    <!-- Members (collapsible) -->
+    <div class="members-panel" id="members-panel">
+      <div class="members-toggle" id="m-toggle" onclick="toggleMembers()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="color:var(--amber)"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        <span class="members-toggle-title">Listening Now</span>
+        <span class="members-badge" id="m-count">0</span>
+        <span class="members-chevron">▼</span>
+      </div>
+      <div class="members-list" id="members-list"></div>
+    </div>
+
+    <!-- Chat -->
+    <div class="chat-panel">
+      <div class="chat-header">Room Chat</div>
+      <div class="chat-messages" id="chat-msgs">
+        <div class="empty" id="chat-empty">
+          <div class="empty-icon">💬</div>
+          <div class="empty-title">No messages yet</div>
+          <div class="empty-sub">Say hi to the room!</div>
+        </div>
+      </div>
+      <div class="chat-input-wrap">
+        <input type="text" class="input-field" id="chat-input" placeholder="Say something…" maxlength="500" autocomplete="off">
+        <button class="chat-send-btn" id="btn-send">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /room-grid -->
+
+<!-- Toast stack -->
+<div class="toast-stack" id="toasts"></div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script src="/config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+/* ── Tiny helpers ─────────────────────────────────────────── */
+const $  = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function esc(s){ const d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML; }
+function fmt(ms){ if(!ms||ms<0)return'0:00'; const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
+function initials(n){ return (n||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
+function ago(d){ const s=Math.floor((Date.now()-new Date(d))/1000); if(s<60)return'just now'; if(s<3600)return`${Math.floor(s/60)}m`; return`${Math.floor(s/3600)}h`; }
+function debounce(fn,ms){ let t; return(...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+function toast(msg,type='info'){
+  const el=document.createElement('div'); el.className=`toast ${type}`; el.textContent=msg;
+  $('#toasts').appendChild(el); setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(20px)'; el.style.transition='all 0.3s'; setTimeout(()=>el.remove(),300); },3500);
+}
+function toggleMembers(){ $('#members-panel')?.classList.toggle('collapsed'); }
+</script>
+<script src="/static/js/youtube-player.js"></script>
+<script src="/static/js/socket-client.js"></script>
+<script>
+/* ── Room Controller ──────────────────────────────────────── */
+(async () => {
+  const YTKEY = window.YOUTUBE_API_KEY || '';
+  const roomId = (location.pathname.match(/\/room\/([^/]+)/) || [])[1];
+  if(!roomId){ location.href='/'; return; }
+
+  let me = null;          // current user object
+  let roomData = null;    // full room data
+  let isHost = false;     // am I the room creator?
+  let muted = false;
+  let vol = 80;
+
+  /* ─── YouTube Player ─────────────────────────────────── */
+  const yt = new YouTubePlayer();
+  yt.setControlCallback((action, extra={}) => {
+    if(!isHost) return; // only host fires socket events
+    const pos = extra.position_ms ?? yt.positionMs;
+    const payload = {
+      room_id: roomId,
+      track_uri: yt.currentVideoId || '',
+      track_name: $('#np-title')?.textContent || '',
+      artist: $('#np-artist')?.textContent || '',
+      album_art_url: $('#art-img')?.src || '',
+      position_ms: pos,
+      duration_ms: yt.durationMs || 0,
+      is_playing: action === 'play',
+    };
+    if(action === 'ended'){
+      sc.emit('next_track', { room_id: roomId });
+    } else {
+      sc.emit('playback_update', payload);
+    }
+    setPlayIcon(action === 'play');
+  });
+
+  /* ─── Socket ─────────────────────────────────────────── */
+  const sc = new SocketClient();
+  sc.on('playback_sync',  d => { if(d?.track_uri){ updateNP(d); yt.syncPosition(d.position_ms, d.is_playing); } });
+  sc.on('track_changed',  d => { updateNP(d); if(d) toast(`▶ ${d.track_name}`, 'success'); });
+  sc.on('queue_updated',  d => renderQueue(d.queue));
+  sc.on('chat_message',   d => addChat(d));
+  sc.on('chat_history',   d => { if(d.messages?.length) d.messages.forEach(addChat); });
+  sc.on('listener_count', d => updateMembers(d.listeners ?? d.count ?? []));
+  sc.on('user_joined',    d => toast(`🎧 ${d.display_name} joined`, 'info'));
+  sc.on('user_left',      d => toast(`${d.display_name} left`, 'info'));
+  sc.on('room_closed',    d => { toast(d?.reason || 'Room closed', 'info'); setTimeout(()=>location.href='/', 2500); });
+
+  /* ─── Auth ───────────────────────────────────────────── */
+  async function checkAuth(){
+    const res = await fetch('/auth/me', { credentials:'include' });
+    if(res.ok){ me = (await res.json()).user; }
+    if(!me){
+      const name = localStorage.getItem('openjam_display_name');
+      if(name){
+        const r2 = await fetch('/auth/join', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({display_name:name}), credentials:'include' });
+        if(r2.ok) me = (await r2.json()).user;
+      }
+    }
+    if(!me){ location.href='/'; return; }
+    $('#nav-avatar').textContent = initials(me.display_name);
+    $('#nav-name').textContent = me.display_name;
+    $('#navbar-right').style.display = 'flex';
+  }
+
+  /* ─── Load Room ──────────────────────────────────────── */
+  async function loadRoom(){
+    const res = await fetch(`/rooms/${roomId}`, { credentials:'include' });
+    if(!res.ok){ toast('Room not found','error'); setTimeout(()=>location.href='/',2e3); return; }
+    roomData = await res.json();
+    const room = roomData.room;
+    document.title = `${room.name} — Open Jam`;
+
+    $('#bar-name').textContent = room.name;
+    $('#bar-host').textContent = `Hosted by ${room.host_name || 'Unknown'}`;
+    $('#room-bar').style.display = 'flex';
+
+    isHost = !!(me && room.host_user_id === me.id);
+    applyHostUI();
+
+    if(room.current_track) updateNP(room.current_track);
+    renderQueue(roomData.queue || []);
+    if(Array.isArray(roomData.listeners)) updateMembers(roomData.listeners);
+  }
+
+  function applyHostUI(){
+    if(isHost){
+      $('#btn-close').style.display = 'inline-flex';
+      $('#controls-row').style.display = 'flex';
+      $('#controls-locked').style.display = 'none';
+    } else {
+      $('#btn-close').style.display = 'none';
+      $('#controls-row').style.display = 'none';
+      $('#controls-locked').style.display = 'block';
+    }
+  }
+
+  /* ─── Now Playing ────────────────────────────────────── */
+  const BLANK = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'1\' height=\'1\'%3E%3C/svg%3E';
+  let progressInterval = null;
+
+  function updateNP(track){
+    const artImg = $('#art-img');
+    const vinyl  = $('#art-vinyl');
+    const eq     = $('#np-eq');
+    const ambient = $('#room-ambient');
+
+    if(!track || !track.track_uri){
+      $('#np-title').textContent = 'Nothing playing';
+      $('#np-artist').textContent = 'Add a track to the queue';
+      artImg.src = BLANK;
+      artImg.classList.remove('spinning'); vinyl.classList.remove('spinning');
+      if(eq) eq.style.display='none';
+      if(ambient) ambient.classList.remove('active');
+      setPlayIcon(false);
+      clearInterval(progressInterval);
+      $('#progress').style.width='0%';
+      $('#time-cur').textContent='0:00'; $('#time-dur').textContent='0:00';
+      return;
+    }
+
+    $('#np-title').textContent = track.track_name || 'Unknown Track';
+    $('#np-artist').textContent = track.artist || '';
+    if(track.album_art_url && track.album_art_url !== artImg.src){
+      artImg.src = track.album_art_url;
+      if(ambient){ ambient.style.backgroundImage=`url(${track.album_art_url})`; ambient.classList.add('active'); }
+    }
+
+    const playing = track.is_playing !== false;
+    artImg.classList.toggle('spinning', playing);
+    vinyl.classList.toggle('spinning', playing);
+    if(eq) eq.style.display = playing ? 'flex' : 'none';
+    setPlayIcon(playing);
+
+    yt.setTrack({ track_uri:track.track_uri, position_ms:track.position_ms||0, duration_ms:track.duration_ms||0, is_playing:playing });
+
+    // Progress ticker
+    clearInterval(progressInterval);
+    let pos = track.position_ms || 0;
+    const dur = track.duration_ms || 0;
+    updateProgress(pos, dur);
+    if(playing){
+      progressInterval = setInterval(()=>{
+        pos = Math.min(pos+1000, dur);
+        updateProgress(pos, dur);
+      }, 1000);
+    }
+  }
+
+  function updateProgress(pos, dur){
+    $('#time-cur').textContent = fmt(pos);
+    $('#time-dur').textContent = fmt(dur);
+    $('#progress').style.width = dur ? `${(pos/dur)*100}%` : '0%';
+  }
+
+  function setPlayIcon(playing){
+    const p=$('#ico-play'), pa=$('#ico-pause');
+    if(p) p.style.display = playing ? 'none' : 'block';
+    if(pa) pa.style.display = playing ? 'block' : 'none';
+  }
+
+  /* ─── Queue ──────────────────────────────────────────── */
+  function renderQueue(q){
+    const list = $('#queue-list');
+    const empty = $('#q-empty');
+    const pending = (q||[]).filter(i=>i.status!=='played');
+    $('#q-count').textContent = `${pending.length} track${pending.length!==1?'s':''}`;
+
+    if(!pending.length){ list.innerHTML=''; list.appendChild(empty); empty.style.display='flex'; return; }
+    empty.style.display='none';
+
+    list.innerHTML = pending.map(item=>{
+      const isPlaying = item.status==='playing';
+      const voted = me && (item.voter_ids||[]).includes(me.id);
+      return `
+      <div class="queue-item ${isPlaying?'playing':''}" data-id="${item.id}">
+        <img class="queue-item-art" src="${esc(item.album_art_url||'')}" alt="" onerror="this.src=''">
+        <div class="queue-item-info">
+          <div class="queue-item-name">${esc(item.track_name)}</div>
+          <div class="queue-item-artist">${esc(item.artist)}</div>
+          <div class="queue-item-by">Added by ${esc(item.added_by_name||'Unknown')}</div>
+        </div>
+        ${isPlaying
+          ? `<div class="eq"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>`
+          : `<button class="vote-btn ${voted?'voted':''}" onclick="doVote('${item.id}')" ${voted?'disabled':''}>
+               <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l7 7H5z"/></svg>
+               ${item.votes||0}
+             </button>`}
+      </div>`;
+    }).join('');
+  }
+  window.doVote = id => sc.voteTrack(id);
+
+  /* ─── Members ────────────────────────────────────────── */
+  function updateMembers(listeners){
+    const list = $('#members-list');
+    const badge = $('#m-count');
+    if(!list) return;
+    const arr = Array.isArray(listeners) ? listeners : [];
+    if(badge) badge.textContent = arr.length;
+
+    list.innerHTML = arr.map(l => {
+      const isSelf = me && l.user_id===me.id;
+      const isRoomHost = roomData && l.user_id===roomData.room?.host_user_id;
+      return `
+      <div class="member-item">
+        <div class="member-avatar-wrap">
+          <div class="avatar avatar-sm">${initials(l.display_name)}</div>
+          <div class="member-online"></div>
+        </div>
+        <span class="member-name">${esc(l.display_name)}${isSelf ? ' <span class="member-you">(you)</span>' : ''}</span>
+        ${isRoomHost ? `<span class="badge badge-host">Host</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  /* ─── Track Search ───────────────────────────────────── */
+  const qSearch = $('#q-search');
+  const srEl = $('#search-results');
+
+  async function searchTracks(q){
+    const r = await fetch(`/search?q=${encodeURIComponent(q)}`, { credentials:'include' });
+    if(!r.ok) return [];
+    return (await r.json()).tracks || [];
+  }
+  async function resolveYT(query){
+    if(!YTKEY) return null;
+    const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=1&key=${YTKEY}`);
+    if(!r.ok) return null;
+    const d = await r.json();
+    return d.items?.[0]?.id?.videoId || null;
+  }
+
+  qSearch?.addEventListener('input', debounce(async e=>{
+    const q = e.target.value.trim();
+    if(!q){ srEl.classList.remove('open'); return; }
+    const tracks = await searchTracks(q);
+    if(!tracks.length){
+      srEl.innerHTML=`<div style="padding:12px;text-align:center;color:var(--text-3);font-size:12px">No results</div>`;
+      srEl.classList.add('open'); return;
+    }
+    srEl.innerHTML = tracks.map(t=>`
+      <div class="search-result-item"
+        data-uri="${esc(t.uri)}" data-name="${esc(t.name)}" data-artist="${esc(t.artist)}"
+        data-art="${esc(t.album_art_url||'')}" data-dur="${t.duration_ms||0}">
+        <img class="search-result-art" src="${esc(t.album_art_url||'')}" alt="" onerror="this.src=''">
+        <div class="search-result-info">
+          <div class="search-result-name">${esc(t.name)}</div>
+          <div class="search-result-artist">${esc(t.artist)}</div>
+        </div>
+        <div class="add-btn">+</div>
+      </div>`).join('');
+    srEl.classList.add('open');
+
+    srEl.querySelectorAll('.search-result-item').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        srEl.classList.remove('open'); qSearch.value='';
+        toast('Finding on YouTube… 🎵','info');
+        const vid = await resolveYT(el.dataset.uri);
+        if(!vid){ toast('Not found on YouTube. Try another.','error'); return; }
+        sc.addToQueue({ track_uri:vid, track_name:el.dataset.name, artist:el.dataset.artist, album_art_url:el.dataset.art, duration_ms:parseInt(el.dataset.dur)||0 });
+        toast(`Queued: ${el.dataset.name}`, 'success');
+      });
+    });
+  }, 350));
+
+  document.addEventListener('click', e=>{ if(!e.target.closest('#q-search-wrap')) srEl.classList.remove('open'); });
+
+  /* ─── Host Controls ──────────────────────────────────── */
+  $('#btn-play')?.addEventListener('click', ()=>{
+    if(!isHost) return;
+    const playing = yt.isPlaying;
+    if(yt._ready && yt.player){ playing ? yt.player.pauseVideo() : yt.player.playVideo(); }
+    setPlayIcon(!playing);
+    sc.emit('playback_update', {
+      room_id:roomId,
+      track_uri: yt.currentVideoId||'',
+      track_name: $('#np-title')?.textContent||'',
+      artist: $('#np-artist')?.textContent||'',
+      album_art_url: $('#art-img')?.src||'',
+      position_ms: yt.positionMs||0,
+      duration_ms: yt.durationMs||0,
+      is_playing: !playing,
+    });
+  });
+  $('#btn-next')?.addEventListener('click', ()=>{ if(isHost) sc.nextTrack(); });
+  $('#btn-prev')?.addEventListener('click', ()=>{ if(isHost) sc.emit('prev_track', { room_id:roomId }); });
+  $('#btn-close')?.addEventListener('click', async ()=>{
+    if(!confirm('Close this room for everyone?')) return;
+    const r = await fetch(`/rooms/${roomId}`, { method:'DELETE', credentials:'include' });
+    if(r.ok){ toast('Room closed','success'); setTimeout(()=>location.href='/',1500); }
+    else toast('Failed to close room','error');
+  });
+
+  $('#btn-invite')?.addEventListener('click', async ()=>{
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast('Room link copied to clipboard! 📋', 'success');
+    } catch(e) {
+      toast('Failed to copy room link', 'error');
+    }
+  });
+
+  /* ─── Volume ─────────────────────────────────────────── */
+  function applyVol(v){
+    vol = v;
+    if(yt._ready && yt.player?.setVolume) yt.player.setVolume(v);
+    $('#vol-pct').textContent = `${v}%`;
+    const slider = $('#vol-slider');
+    if(slider) slider.style.background = `linear-gradient(to right, var(--amber) ${v}%, var(--bg-elevated) ${v}%)`;
+    $('#ico-vol').style.display  = v>0 ? 'block' : 'none';
+    $('#ico-mute').style.display = v>0 ? 'none'  : 'block';
+  }
+  $('#vol-slider')?.addEventListener('input', e=>{ muted=false; applyVol(+e.target.value); });
+  $('#vol-icon')?.addEventListener('click', ()=>{
+    if(muted){ muted=false; applyVol(vol||80); $('#vol-slider').value=vol||80; }
+    else { muted=true; applyVol(0); $('#vol-slider').value=0; }
+  });
+  const volPoll = setInterval(()=>{ if(yt._ready&&yt.player?.setVolume){ yt.player.setVolume(vol); clearInterval(volPoll); } }, 500);
+
+  /* ─── Chat ───────────────────────────────────────────── */
+  function addChat(msg){
+    const empty = $('#chat-empty');
+    if(empty) empty.style.display='none';
+    const msgs = $('#chat-msgs');
+    const isSelf = me && msg.user_id===me.id;
+    const el = document.createElement('div');
+    el.className = 'chat-message';
+    el.innerHTML = `
+      <div class="avatar avatar-sm">${initials(msg.user_name)}</div>
+      <div class="chat-msg-body">
+        <div class="chat-msg-header">
+          <span class="chat-msg-name${isSelf?' self':''}">${esc(msg.user_name)}</span>
+          <span class="chat-msg-time">${ago(msg.timestamp)}</span>
+        </div>
+        <div class="chat-msg-text">${esc(msg.content)}</div>
+      </div>`;
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  function sendMsg(){ const v=$('#chat-input').value.trim(); if(v){ sc.sendChat(v); $('#chat-input').value=''; } }
+  $('#btn-send')?.addEventListener('click', sendMsg);
+  $('#chat-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
+
+  /* ─── Init ───────────────────────────────────────────── */
+  await checkAuth();
+  await loadRoom();
+  sc.connect();
+  sc.joinRoom(roomId);
+
+  window.addEventListener('beforeunload', ()=>{ sc.leaveRoom(roomId); yt.destroy(); });
+})();
+</script>
+
+<script>
+/* Apply initial volume slider gradient */
+(function(){ const s=document.getElementById('vol-slider'); if(s) s.style.background=`linear-gradient(to right,var(--amber) 80%,var(--bg-elevated) 80%)`; })();
+</script>
+</body>
+</html>

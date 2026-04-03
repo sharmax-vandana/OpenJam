@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Jam — Listen Together</title>
+  <meta name="description" content="Create and join public listening rooms. Discover music with friends.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- ══ NAVBAR ══════════════════════════════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <a href="/" class="navbar-brand">
+      <div class="navbar-vinyl"></div>
+      <div class="navbar-logo">Open<span>Jam</span></div>
+    </a>
+    <div class="navbar-right">
+      <div class="navbar-user" id="navbar-user" style="display:none">
+        <div class="avatar avatar-sm" id="nav-avatar">?</div>
+        <span id="nav-name"></span>
+        <button class="btn btn-ghost" id="btn-logout" title="Leave session" style="margin-left:4px;padding:4px 8px;font-size:12px">✕</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ══ HERO ════════════════════════════════════════════════ -->
+  <section class="hero">
+    <h1 class="hero-title">Open<span>Jam</span></h1>
+    <p class="hero-sub">Create a room and listen to music together in real-time.<br>Collaborative queues, voting, and live chat.</p>
+    <div class="search-wrap">
+      <div class="input-with-icon">
+        <span class="icon-prefix">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        </span>
+        <input type="text" class="input-field" id="search-input" placeholder="Search rooms..." autocomplete="off">
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ROOMS ═══════════════════════════════════════════════ -->
+  <section class="rooms-section">
+    <div class="rooms-top">
+      <h2>Active Rooms</h2>
+      <div class="rooms-meta">
+        <span class="rooms-count" id="rooms-count">Loading...</span>
+        <button class="btn btn-primary" id="btn-create-room" style="display:none;padding:6px 12px;font-size:12px;">+ Create Room</button>
+      </div>
+    </div>
+    
+    <div class="rooms-grid" id="rooms-grid">
+      <!-- Cards rendered here via JS -->
+    </div>
+    
+    <div class="empty" id="empty-state" style="display:none;margin-top:60px">
+      <div class="empty-icon">🎵</div>
+      <div class="empty-title">No rooms active right now</div>
+      <div class="empty-sub">Be the first to create a listening room and start jamming!</div>
+    </div>
+  </section>
+
+  <!-- ══ MODALS ══════════════════════════════════════════════ -->
+  
+  <!-- Join Modal -->
+  <div class="modal-bg active" id="join-modal">
+    <div class="modal-box">
+      <div class="modal-title">🎵 Join the Jam</div>
+      <p style="color:var(--text-3);font-size:13px;margin-bottom:24px;">No signup needed — just pick a name to start listening.</p>
+      <div class="modal-field">
+        <label class="modal-label">Your Display Name</label>
+        <input type="text" class="input-field" id="join-name" placeholder="e.g. VinylLover, NightOwl" maxlength="30" autocomplete="off">
+      </div>
+      <button class="btn btn-primary" id="btn-join" style="width:100%;padding:12px;font-size:14px;margin-top:8px;">Enter Open Jam</button>
+    </div>
+  </div>
+
+  <!-- Create Room Modal -->
+  <div class="modal-bg" id="create-modal">
+    <div class="modal-box">
+      <div class="modal-title">Create a Room</div>
+      <div class="modal-field">
+        <label class="modal-label">Room Name *</label>
+        <input type="text" class="input-field" id="create-name" placeholder="e.g. Late Night Indie Vibes" maxlength="60">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Description</label>
+        <input type="text" class="input-field" id="create-desc" placeholder="What vibe are we going for?" maxlength="200">
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Genre Tags</label>
+        <div class="tag-grid" id="tag-grid">
+          <div class="tag" data-tag="indie">indie</div>
+          <div class="tag" data-tag="rock">rock</div>
+          <div class="tag" data-tag="pop">pop</div>
+          <div class="tag" data-tag="hip-hop">hip-hop</div>
+          <div class="tag" data-tag="electronic">electronic</div>
+          <div class="tag" data-tag="r&b">r&b</div>
+          <div class="tag" data-tag="jazz">jazz</div>
+          <div class="tag" data-tag="classical">classical</div>
+          <div class="tag" data-tag="lofi">lofi</div>
+          <div class="tag" data-tag="metal">metal</div>
+          <div class="tag" data-tag="latin">latin</div>
+          <div class="tag" data-tag="chill">chill</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-create-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-create-submit">Start Jamming</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast stack -->
+  <div class="toast-stack" id="toasts"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    /* ── Tiny helpers ─────────────────────────────────────────── */
+    const $  = s => document.querySelector(s);
+    const $$ = s => document.querySelectorAll(s);
+    function esc(s){ const d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML; }
+    function initials(n){ return (n||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
+    function toast(msg,type='info'){
+      const el=document.createElement('div'); el.className=`toast ${type}`; el.textContent=msg;
+      $('#toasts').appendChild(el); setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(20px)'; el.style.transition='all 0.3s'; setTimeout(()=>el.remove(),300); },3500);
+    }
+
+    /* ── App Logic ────────────────────────────────────────────── */
+    (async () => {
+      let me = null;
+      let rooms = [];
+
+      // 1. Check Auth
+      async function checkAuth(){
+        try {
+          const r = await fetch('/auth/me', { credentials:'include' });
+          if(r.ok){ me = (await r.json()).user; }
+        } catch(e){}
+
+        if(!me){
+          const stored = localStorage.getItem('openjam_display_name');
+          if(stored){
+            try {
+              const r2 = await fetch('/auth/join', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({display_name:stored}), credentials:'include' });
+              if(r2.ok) me = (await r2.json()).user;
+            } catch(e){}
+          }
+        }
+
+        if(me){
+          $('#join-modal').classList.remove('active');
+          $('#nav-avatar').textContent = initials(me.display_name);
+          $('#nav-name').textContent = me.display_name;
+          $('#navbar-user').style.display = 'flex';
+          $('#btn-create-room').style.display = 'inline-flex';
+        } else {
+          $('#join-modal').classList.add('active');
+        }
+      }
+
+      // 2. Auth Actions
+      $('#btn-join').addEventListener('click', async ()=>{
+        const name = $('#join-name').value.trim();
+        if(!name) return toast('Please enter a name','error');
+        $('#btn-join').disabled = true; $('#btn-join').textContent = 'Joining...';
+        try {
+          const r = await fetch('/auth/join', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({display_name:name}), credentials:'include' });
+          if(r.ok){
+            me = (await r.json()).user;
+            localStorage.setItem('openjam_display_name', name);
+            $('#join-modal').classList.remove('active');
+            $('#nav-avatar').textContent = initials(me.display_name);
+            $('#nav-name').textContent = me.display_name;
+            $('#navbar-user').style.display = 'flex';
+            $('#btn-create-room').style.display = 'inline-flex';
+            toast(`Welcome to Open Jam, ${name}!`, 'success');
+          } else { throw new Error('Join failed'); }
+        } catch(e){ toast(e.message||'Failed to join','error'); }
+        finally { $('#btn-join').disabled=false; $('#btn-join').textContent = 'Enter Open Jam'; }
+      });
+      $('#join-name').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#btn-join').click(); });
+      
+      $('#btn-logout').addEventListener('click', async ()=>{
+        if(!confirm('Leaving session? you will be removed from any active rooms.')) return;
+        localStorage.removeItem('openjam_display_name');
+        await fetch('/auth/logout', { method:'POST', credentials:'include' });
+        location.reload();
+      });
+
+      // 3. Load Rooms
+      async function loadRooms(){
+        try {
+          const r = await fetch('/rooms', { credentials:'include' });
+          if(!r.ok) return;
+          const data = await r.json();
+          rooms = data.rooms || [];
+          renderRooms(rooms);
+          
+          if(data.listener_counts){
+            Object.entries(data.listener_counts).forEach(([rid, count]) => {
+              const el = $(`#lc-${rid}`);
+              if(el) el.textContent = count;
+            });
+          }
+        } catch(e){ console.error(e); }
+      }
+
+      function renderRooms(list){
+        $('#rooms-count').textContent = `${list.length} room${list.length!==1?'s':''}`;
+        const grid = $('#rooms-grid');
+        const empty = $('#empty-state');
+        if(!list.length){
+          grid.innerHTML = '';
+          empty.style.display = 'flex';
+          return;
+        }
+        empty.style.display = 'none';
+        
+        grid.innerHTML = list.map(r => {
+          const t = r.current_track;
+          const trackHtml = t 
+            ? `<div class="room-card-track">
+                 <img class="room-card-art" src="${t.album_art_url||''}" onerror="this.src=''">
+                 <div style="min-width:0;flex:1;">
+                   <div class="room-card-track-name">${esc(t.track_name)}</div>
+                   <div class="room-card-track-artist">${esc(t.artist)}</div>
+                 </div>
+               </div>`
+            : `<div class="room-card-idle">No track playing</div>`;
+
+          return `
+          <div class="room-card" onclick="location.href='/room/${esc(r.id)}'">
+            <div class="room-card-top">
+              <div style="min-width:0">
+                <div class="room-card-name">${esc(r.name)}</div>
+                <div class="room-card-host">Hosted by ${esc(r.host_name||'Unknown')}</div>
+              </div>
+              <div class="room-listeners">
+                <div class="room-listeners-dot"></div>
+                <span id="lc-${r.id}">0</span>
+              </div>
+            </div>
+            <div class="room-card-tags">
+              ${(r.tags||[]).map(tag=>`<span class="tag">${esc(tag)}</span>`).join('')}
+            </div>
+            ${trackHtml}
+          </div>`;
+        }).join('');
+      }
+
+      // Search filter
+      $('#search-input').addEventListener('input', e=>{
+        const q = e.target.value.toLowerCase();
+        renderRooms(rooms.filter(r => r.name.toLowerCase().includes(q) || (r.tags||[]).some(t=>t.toLowerCase().includes(q))));
+      });
+
+      // 4. Create Room Modal
+      const selectedTags = new Set();
+      $$('#tag-grid .tag').forEach(t=>{
+        t.addEventListener('click', ()=>{
+          const tag = t.dataset.tag;
+          if(selectedTags.has(tag)){ selectedTags.delete(tag); t.classList.remove('active'); }
+          else { if(selectedTags.size>=3) return toast('Max 3 tags','error'); selectedTags.add(tag); t.classList.add('active'); }
+        });
+      });
+
+      $('#btn-create-room').addEventListener('click', ()=> {
+        if(!me) return toast('You must join first', 'error');
+        $('#create-modal').classList.add('open');
+      });
+      $('#btn-create-cancel').addEventListener('click', ()=>{
+        $('#create-modal').classList.remove('open');
+        $('#create-name').value=''; $('#create-desc').value='';
+        selectedTags.clear(); $$('#tag-grid .tag').forEach(t=>t.classList.remove('active'));
+      });
+      
+      $('#btn-create-submit').addEventListener('click', async ()=>{
+        const btn = $('#btn-create-submit');
+        const name = $('#create-name').value.trim();
+        const desc = $('#create-desc').value.trim();
+        
+        if(!name) return toast('Room name is required', 'error');
+        btn.disabled = true; btn.textContent = 'Creating...';
+        
+        try {
+          const r = await fetch('/rooms', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description:desc, tags:Array.from(selectedTags), is_private:false }),
+            credentials: 'include'
+          });
+          if(r.ok){
+            const data = await r.json();
+            location.href = `/room/${data.room.id}`;
+          } else {
+            const err = await r.json();
+            throw new Error(err.detail || 'Failed to create room');
+          }
+        } catch(e){
+          toast(e.message, 'error');
+          btn.disabled = false; btn.textContent = 'Start Jamming';
+        }
+      });
+
+      // Let's go
+      await checkAuth();
+      await loadRooms();
+      setInterval(loadRooms, 15000); // refresh every 15s
+    })();
+  </script>
+</body>
+</html>
