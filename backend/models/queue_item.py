@@ -1,11 +1,14 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Index
 from backend.database import Base
 
 
 class QueueItem(Base):
     __tablename__ = "queue_items"
+    __table_args__ = (
+        Index("ix_queue_room_status", "room_id", "status"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     room_id = Column(String, ForeignKey("rooms.id"), nullable=False, index=True)

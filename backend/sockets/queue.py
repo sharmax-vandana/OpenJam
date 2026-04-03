@@ -1,9 +1,44 @@
-"""Socket.IO queue event handlers — all members can add tracks and vote."""
+"""Socket.IO queue event handlers — non-blocking DB via asyncio.to_thread()."""
 
+import asyncio
 import socketio
 from backend.database import SessionLocal
 from backend.services.room_manager import room_manager
 from backend.services.queue_manager import queue_manager
+
+
+def _db_add_and_get_queue(room_id: str, track_data: dict, user_id: str, display_name: str):
+    """Add a track and get current queue — runs in thread pool."""
+    db = SessionLocal()
+    try:
+        queue_manager.add_track(db, room_id, track_data, user_id, display_name)
+        now_playing = queue_manager.get_now_playing(db, room_id)
+        next_item = None
+        if not now_playing:
+            next_item = queue_manager.advance_queue(db, room_id)
+        queue = queue_manager.get_queue(db, room_id, None)
+        return queue, next_item
+    finally:
+        db.close()
+
+
+def _db_get_queue_after_next(room_id: str):
+    """Get queue after advancing — runs in thread pool."""
+    db = SessionLocal()
+    try:
+        return queue_manager.get_queue(db, room_id, None)
+    finally:
+        db.close()
+
+
+def _db_vote_track(room_id: str, queue_item_id: str, user_id: str):
+    """Vote for a track and return updated queue — runs in thread pool."""
+    db = SessionLocal()
+    try:
+        queue_manager.vote_track(db, queue_item_id, user_id)
+        return queue_manager.get_queue(db, room_id, None)
+    finally:
+        db.close()
 
 
 def register_queue_handlers(sio: socketio.AsyncServer):
@@ -32,35 +67,34 @@ def register_queue_handlers(sio: socketio.AsyncServer):
             "duration_ms": data.get("duration_ms", 0),
         }
 
-        db = SessionLocal()
         try:
-            queue_manager.add_track(db, room_id, track_data, user_id, display_name)
-            queue = queue_manager.get_queue(db, room_id, None)
-
-            # Auto-play if nothing is currently playing
-            now_playing = queue_manager.get_now_playing(db, room_id)
-            if not now_playing:
-                next_item = queue_manager.advance_queue(db, room_id)
-                if next_item:
-                    room_manager.update_playback(
-                        room_id=room_id,
-                        track_uri=next_item["track_uri"],
-                        track_name=next_item["track_name"],
-                        artist=next_item["artist"],
-                        album_art_url=next_item.get("album_art_url", ""),
-                        position_ms=0,
-                        duration_ms=next_item.get("duration_ms", 0),
-                        is_playing=True,
-                    )
-                    from backend.sockets.playback import ensure_sync_loop
-                    ensure_sync_loop(room_id, sio)
-                    await sio.emit("track_changed", next_item, room=room_id)
-                    queue = queue_manager.get_queue(db, room_id)
+            queue, next_item = await asyncio.to_thread(
+                _db_add_and_get_queue, room_id, track_data, user_id, display_name
+            )
         except Exception as e:
             print(f"[queue] add_to_queue error: {e}")
             return
-        finally:
-            db.close()
+
+        # Auto-play: if a first track was found, emit track_changed and start sync loop
+        if next_item:
+            room_manager.update_playback(
+                room_id=room_id,
+                track_uri=next_item["track_uri"],
+                track_name=next_item["track_name"],
+                artist=next_item["artist"],
+                album_art_url=next_item.get("album_art_url", ""),
+                position_ms=0,
+                duration_ms=next_item.get("duration_ms", 0),
+                is_playing=True,
+            )
+            from backend.sockets.playback import ensure_sync_loop
+            ensure_sync_loop(room_id, sio)
+            await sio.emit("track_changed", next_item, room=room_id)
+            # Re-fetch queue after auto-advance (no blocking — already in thread)
+            try:
+                queue = await asyncio.to_thread(_db_get_queue_after_next, room_id)
+            except Exception:
+                pass  # use the queue we already have
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)
 
@@ -83,14 +117,10 @@ def register_queue_handlers(sio: socketio.AsyncServer):
 
         user_id = session.get("user_id") or f"guest_{sid}"
 
-        db = SessionLocal()
         try:
-            queue_manager.vote_track(db, queue_item_id, user_id)
-            queue = queue_manager.get_queue(db, room_id, None)
+            queue = await asyncio.to_thread(_db_vote_track, room_id, queue_item_id, user_id)
         except Exception as e:
             print(f"[queue] vote_track error: {e}")
             return
-        finally:
-            db.close()
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)

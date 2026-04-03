@@ -1,12 +1,30 @@
-"""Socket.IO connection and room join/leave handlers — fully anonymous."""
+"""Socket.IO connection and room join/leave handlers — non-blocking DB via asyncio.to_thread()."""
 
+import asyncio
 import socketio
 from backend.database import SessionLocal
 from backend.models.chat_message import ChatMessage
-from backend.middleware.auth import get_current_user_id
 from backend.services.room_manager import room_manager
 from backend.services.queue_manager import queue_manager
 from backend.services.room_closer import schedule_room_close, cancel_room_close
+
+
+def _db_get_join_data(room_id: str) -> tuple:
+    """Load chat history + queue on join — runs in thread pool."""
+    db = SessionLocal()
+    try:
+        messages = (
+            db.query(ChatMessage)
+            .filter(ChatMessage.room_id == room_id)
+            .order_by(ChatMessage.timestamp.desc())
+            .limit(50)
+            .all()
+        )
+        messages.reverse()
+        queue = queue_manager.get_queue(db, room_id)
+        return [m.to_dict() for m in messages], queue
+    finally:
+        db.close()
 
 
 def register_connection_handlers(sio: socketio.AsyncServer):
@@ -97,19 +115,10 @@ def register_connection_handlers(sio: socketio.AsyncServer):
         await sio.enter_room(sid, room_id)
         cancel_room_close(room_id)
 
-        db = SessionLocal()
-        try:
-            messages = db.query(ChatMessage).filter(
-                ChatMessage.room_id == room_id
-            ).order_by(ChatMessage.timestamp.desc()).limit(50).all()
-            messages.reverse()
-            queue = queue_manager.get_queue(db, room_id)
-        finally:
-            db.close()
+        # Offload blocking DB read to a thread pool — event loop stays free
+        messages, queue = await asyncio.to_thread(_db_get_join_data, room_id)
 
-        await sio.emit("chat_history", {
-            "messages": [m.to_dict() for m in messages],
-        }, to=sid)
+        await sio.emit("chat_history", {"messages": messages}, to=sid)
         await sio.emit("queue_updated", {"queue": queue}, to=sid)
 
         playback = room_manager.get_playback(room_id)

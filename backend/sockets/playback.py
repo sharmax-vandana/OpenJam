@@ -90,12 +90,17 @@ def register_playback_handlers(sio: socketio.AsyncServer):
 
         from backend.database import SessionLocal
         from backend.services.queue_manager import queue_manager
-        db = SessionLocal()
-        try:
-            next_item = queue_manager.advance_queue(db, room_id)
-            queue = queue_manager.get_queue(db, room_id)
-        finally:
-            db.close()
+
+        def _advance(room_id):
+            db = SessionLocal()
+            try:
+                next_item = queue_manager.advance_queue(db, room_id)
+                queue = queue_manager.get_queue(db, room_id)
+                return next_item, queue
+            finally:
+                db.close()
+
+        next_item, queue = await asyncio.to_thread(_advance, room_id)
 
         if next_item:
             room_manager.update_playback(
@@ -116,3 +121,4 @@ def register_playback_handlers(sio: socketio.AsyncServer):
             await sio.emit("track_changed", None, room=room_id)
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)
+
