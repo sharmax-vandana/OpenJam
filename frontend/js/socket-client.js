@@ -49,9 +49,11 @@ class SocketClient {
     const events = [
       'user_joined', 'user_left',
       'chat_message', 'chat_history',
-      'queue_updated', 'playback_sync',
-      'track_changed', 'listener_count',
-      'room_closed', 'name_updated',
+      'queue_updated', 'queue_error',
+      'playback_sync', 'track_changed',
+      'listener_count', 'room_closed',
+      'name_updated', 'room_reaction',
+      'reaction',
     ];
     events.forEach(event => {
       this.socket.on(event, (data) => {

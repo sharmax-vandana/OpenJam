@@ -583,9 +583,6 @@ function _mobMarkUnread() {
       </div>`;
     }).join('');
   }
-
-    }).join('');
-  }
   window.doVote = id => sc.emit('vote_track', { room_id: roomId, queue_item_id: id });
 
   /* ─── Members ────────────────────────────────────────── */
@@ -903,15 +900,45 @@ function _mobMarkUnread() {
   $('#btn-send')?.addEventListener('click', sendMsg);
   $('#chat-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
 
+  /* ─── Queue Poll Fallback ────────────────────────────── */
+  // Belt-and-suspenders: if a socket queue_updated event is ever missed,
+  // re-fetch from REST every 5 seconds and re-render silently.
+  async function pollQueue(){
+    try {
+      const r = await fetch(`/rooms/${roomId}`, { credentials:'include' });
+      if(r.ok){
+        const d = await r.json();
+        if(Array.isArray(d.queue)) renderQueue(d.queue);
+      }
+    } catch(_){}
+  }
+  setInterval(pollQueue, 5000);
+
+  // On socket reconnect, immediately re-join and re-fetch queue
+  sc.socket && sc.socket.on('connect', () => {
+    sc.joinRoom(roomId);
+    setTimeout(pollQueue, 500);
+  });
+
   /* ─── Init ───────────────────────────────────────────── */
+
   await checkAuth();
   await loadRoom();
   checkQueuePermissions();
   sc.connect();
   sc.joinRoom(roomId);
 
+  // Wire reconnect AFTER connect() so sc.socket exists
+  if(sc.socket){
+    sc.socket.on('connect', () => {
+      sc.joinRoom(roomId);
+      setTimeout(pollQueue, 500);
+    });
+  }
+
   window.addEventListener('beforeunload', ()=>{ sc.leaveRoom(roomId); yt.destroy(); });
 })();
+
 </script>
 
 <script>
