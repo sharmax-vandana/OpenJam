@@ -2,6 +2,7 @@
 
 import asyncio
 import socketio
+from datetime import datetime, timezone
 from backend.services.room_manager import room_manager
 
 # Tracks which rooms have an active sync loop
@@ -9,35 +10,90 @@ _sync_tasks: dict = {}
 
 
 async def _playback_sync_loop(room_id: str, sio: socketio.AsyncServer):
-    """Broadcast playback state every 2 seconds to keep all clients in sync."""
+    """Broadcast playback state every 2 seconds, using wall-clock for accurate position."""
+    last_tick = datetime.now(timezone.utc)
+
     while True:
         await asyncio.sleep(2)
+
         playback = room_manager.get_playback(room_id)
         if not playback or not playback.get("track_uri"):
             continue
         if not playback.get("is_playing"):
             continue
-        playback = dict(playback)
-        playback["position_ms"] = min(
-            playback.get("position_ms", 0) + 2000,
-            playback.get("duration_ms", 0) or 99999999,
+
+        # Wall-clock delta — accurate even if loop drifts
+        now = datetime.now(timezone.utc)
+        elapsed_ms = int((now - last_tick).total_seconds() * 1000)
+        last_tick = now
+
+        new_pos = min(
+            playback.get("position_ms", 0) + elapsed_ms,
+            playback.get("duration_ms", 0) or 999_999_999,
         )
+
+        # Auto-advance when track ends
+        duration = playback.get("duration_ms", 0)
+        if duration and new_pos >= duration - 500:
+            stop_sync_loop(room_id)
+            # Fire next_track logic inline
+            from backend.database import SessionLocal
+            from backend.services.queue_manager import queue_manager
+
+            def _advance(rid):
+                db = SessionLocal()
+                try:
+                    nxt = queue_manager.advance_queue(db, rid)
+                    q   = queue_manager.get_queue(db, rid)
+                    return nxt, q
+                finally:
+                    db.close()
+
+            next_item, queue = await asyncio.to_thread(_advance, room_id)
+
+            if next_item:
+                room_manager.update_playback(
+                    room_id=room_id,
+                    track_uri=next_item["track_uri"],
+                    track_name=next_item["track_name"],
+                    artist=next_item["artist"],
+                    album_art_url=next_item.get("album_art_url", ""),
+                    position_ms=0,
+                    duration_ms=next_item.get("duration_ms", 0),
+                    is_playing=True,
+                )
+                ensure_sync_loop(room_id, sio)
+                await sio.emit("track_changed", next_item, room=room_id)
+            else:
+                room_manager.update_playback(room_id, "", "", "", "", 0, 0, False)
+                await sio.emit("track_changed", None, room=room_id)
+
+            await sio.emit("queue_updated", {"queue": queue}, room=room_id)
+            return
+
+        # Update server-side position
         room_manager.update_playback(
             room_id=room_id,
             track_uri=playback["track_uri"],
             track_name=playback.get("track_name", ""),
             artist=playback.get("artist", ""),
             album_art_url=playback.get("album_art_url", ""),
-            position_ms=playback["position_ms"],
+            position_ms=new_pos,
             duration_ms=playback.get("duration_ms", 0),
             is_playing=True,
         )
-        await sio.emit("playback_sync", room_manager.get_playback(room_id), room=room_id)
+
+        # Emit only to non-host listeners to prevent host jitter
+        host_sid = room_manager.get_host_sid(room_id)
+        updated = room_manager.get_playback(room_id)
+        await sio.emit("playback_sync", updated, room=room_id, skip_sid=host_sid)
 
 
 def ensure_sync_loop(room_id: str, sio: socketio.AsyncServer):
     if room_id not in _sync_tasks or _sync_tasks[room_id].done():
         _sync_tasks[room_id] = asyncio.create_task(_playback_sync_loop(room_id, sio))
+
+
 
 
 def stop_sync_loop(room_id: str):

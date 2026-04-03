@@ -349,8 +349,15 @@ function _mobMarkUnread() {
   sc.on('playback_sync',  d => {
     if (d?.track_uri) {
       if (!isHost) {
+        // Always update the NP display
         updateNP(d);
-        yt.syncPosition(d.position_ms, d.is_playing);
+        // Only hard-resync position if drift is significant (>3s) to avoid jitter
+        const serverPos = d.position_ms || 0;
+        const clientPos = yt.positionMs || 0;
+        const drift = Math.abs(serverPos - clientPos);
+        if (drift > 3000) {
+          yt.syncPosition(serverPos, d.is_playing);
+        }
       }
     }
   });
@@ -502,16 +509,28 @@ function _mobMarkUnread() {
     if(!pending.length){ list.innerHTML=''; list.appendChild(empty); empty.style.display='flex'; return; }
     empty.style.display='none';
 
-    list.innerHTML = pending.map(item=>{
+    // Separate playing from pending for rendering order
+    const playing = pending.filter(i=>i.status==='playing');
+    const queued  = pending.filter(i=>i.status!=='playing');
+
+    list.innerHTML = [...playing, ...queued].map((item, idx)=>{
       const isPlaying = item.status==='playing';
       const voted = me && (item.voter_ids||[]).includes(me.id);
+      const pos = isPlaying ? '' : `#${idx + (playing.length ? 0 : 1)}`;
+      const dur = item.duration_ms && item.duration_ms > 0 ? fmt(item.duration_ms) : '';
       return `
       <div class="queue-item ${isPlaying?'playing':''}" data-id="${item.id}">
         <img class="queue-item-art" src="${esc(item.album_art_url||'')}" alt="" onerror="this.src=''">
         <div class="queue-item-info">
           <div class="queue-item-name">${esc(item.track_name)}</div>
           <div class="queue-item-artist">${esc(item.artist)}</div>
-          <div class="queue-item-by">Added by ${esc(item.added_by_name||'Unknown')}</div>
+          <div class="queue-item-meta">
+            ${isPlaying
+              ? `<span class="queue-now-badge">▶ NOW PLAYING</span>`
+              : `<span class="queue-item-num">${pos}</span>`}
+            ${dur ? `<span class="queue-item-dur">${esc(dur)}</span>` : ''}
+            <span class="queue-item-by">${esc(item.added_by_name||'Unknown')}</span>
+          </div>
         </div>
         ${isPlaying
           ? `<div class="eq"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>`
@@ -648,8 +667,11 @@ function _mobMarkUnread() {
     srEl.querySelectorAll('.search-result-item').forEach(el=>{
       el.addEventListener('click', async ()=>{
         srEl.classList.remove('open'); qSearch.value='';
-        toast('Finding on YouTube… 🎵','info');
+        // Show inline loading state immediately
+        srEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px"><span style="display:inline-block;width:12px;height:12px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite"></span> Finding on YouTube…</div>`;
+        srEl.classList.add('open');
         const vid = await resolveYT(el.dataset.uri);
+        srEl.classList.remove('open');
         if(!vid){ toast('Not found on YouTube. Try another.','error'); return; }
         sc.emit('add_to_queue', { room_id:roomId, track_uri:vid, track_name:el.dataset.name, artist:el.dataset.artist, album_art_url:el.dataset.art, duration_ms:parseInt(el.dataset.dur)||0 });
         toast(`Queued: ${el.dataset.name}`, 'success');
@@ -658,6 +680,22 @@ function _mobMarkUnread() {
   }, 350));
 
   document.addEventListener('click', e=>{ if(!e.target.closest('#q-search-wrap')) srEl.classList.remove('open'); });
+
+  // Invite button — copy room URL to clipboard
+  $('#btn-invite')?.addEventListener('click', ()=>{
+    navigator.clipboard.writeText(location.href).then(()=>{
+      toast('Room link copied! 🔗', 'success');
+    }).catch(()=>{
+      // Fallback for browsers that block clipboard
+      const el = document.createElement('textarea');
+      el.value = location.href;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      toast('Room link copied! 🔗', 'success');
+    });
+  });
 
   /* ─── Host Controls ──────────────────────────────────── */
   $('#btn-play')?.addEventListener('click', ()=>{
