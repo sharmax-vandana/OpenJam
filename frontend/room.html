@@ -320,6 +320,7 @@ function _mobMarkUnread() {
   let isHost = false;     // am I the room creator?
   let muted = false;
   let vol = 80;
+  let _currentTrackUri = null; // track when URI truly changes to avoid reload loops
 
   /* ─── YouTube Player ─────────────────────────────────── */
   const yt = new YouTubePlayer();
@@ -349,9 +350,9 @@ function _mobMarkUnread() {
   sc.on('playback_sync',  d => {
     if (d?.track_uri) {
       if (!isHost) {
-        // Always update the NP display
-        updateNP(d);
-        // Only hard-resync position if drift is significant (>3s) to avoid jitter
+        // Update DISPLAY only (title/art/progress) — never re-loads the YT player
+        updateNPDisplay(d);
+        // Only hard-resync YT position if drift is significant (>3s)
         const serverPos = d.position_ms || 0;
         const clientPos = yt.positionMs || 0;
         const drift = Math.abs(serverPos - clientPos);
@@ -361,7 +362,10 @@ function _mobMarkUnread() {
       }
     }
   });
-  sc.on('track_changed',  d => { updateNP(d); if(d) toast(`▶ ${d.track_name}`, 'success'); });
+  sc.on('track_changed',  d => {
+    updateNP(d); // Full update — loads new track into YT
+    if(d) toast(`▶ ${d.track_name}`, 'success');
+  });
   sc.on('queue_updated',  d => renderQueue(d.queue));
   sc.on('chat_message',   d => addChat(d));
   sc.on('chat_history',   d => { if(d.messages?.length) d.messages.forEach(addChat); });
@@ -435,13 +439,38 @@ function _mobMarkUnread() {
   const BLANK = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'1\' height=\'1\'%3E%3C/svg%3E';
   let progressInterval = null;
 
+  function updateNPDisplay(track){
+    // Lightweight — update title/art/progress only. Does NOT reload YT player.
+    const artImg = $('#art-img');
+    const vinyl  = $('#art-vinyl');
+    const eq     = $('#np-eq');
+    const ambient = $('#room-ambient');
+    if(!track || !track.track_uri) return;
+    $('#np-title').textContent = track.track_name || 'Unknown Track';
+    $('#np-artist').textContent = track.artist || '';
+    if(track.album_art_url && track.album_art_url !== artImg.src){
+      artImg.src = track.album_art_url;
+      const dynBg = $('#dynamic-bg');
+      if(dynBg){ dynBg.src = track.album_art_url; dynBg.classList.add('active'); }
+      if(ambient){ ambient.style.backgroundImage=`url(${track.album_art_url})`; ambient.classList.add('active'); }
+    }
+    const playing = track.is_playing !== false;
+    artImg.classList.toggle('spinning', playing);
+    vinyl.classList.toggle('spinning', playing);
+    if(eq) eq.style.display = playing ? 'flex' : 'none';
+    setPlayIcon(playing);
+    updateProgress(track.position_ms||0, track.duration_ms||0);
+  }
+
   function updateNP(track){
+    // Full update — updates display AND loads a new track into YT if URI changed.
     const artImg = $('#art-img');
     const vinyl  = $('#art-vinyl');
     const eq     = $('#np-eq');
     const ambient = $('#room-ambient');
 
     if(!track || !track.track_uri){
+      _currentTrackUri = null;
       $('#np-title').textContent = 'Nothing playing';
       $('#np-artist').textContent = 'Add a track to the queue';
       artImg.src = BLANK;
@@ -472,7 +501,11 @@ function _mobMarkUnread() {
     if(eq) eq.style.display = playing ? 'flex' : 'none';
     setPlayIcon(playing);
 
-    yt.setTrack({ track_uri:track.track_uri, position_ms:track.position_ms||0, duration_ms:track.duration_ms||0, is_playing:playing });
+    // Only reload YT player when the actual video ID changes
+    if(track.track_uri !== _currentTrackUri){
+      _currentTrackUri = track.track_uri;
+      yt.setTrack({ track_uri:track.track_uri, position_ms:track.position_ms||0, duration_ms:track.duration_ms||0, is_playing:playing });
+    }
 
     // Progress ticker
     clearInterval(progressInterval);
@@ -635,48 +668,114 @@ function _mobMarkUnread() {
     if(!r.ok) return [];
     return (await r.json()).tracks || [];
   }
-  async function resolveYT(query){
-    if(!YTKEY) return null;
-    const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=1&key=${YTKEY}`);
-    if(!r.ok) return null;
-    const d = await r.json();
-    return d.items?.[0]?.id?.videoId || null;
+  async function resolveYTServerSide(query){
+    // Server-side resolve: API key stays hidden, returns video ID
+    try {
+      const r = await fetch(`/search/resolve?q=${encodeURIComponent(query)}`, { credentials:'include' });
+      if(!r.ok) return null;
+      const d = await r.json();
+      return d.video_id || null;
+    } catch(e) { return null; }
   }
+
+  async function loadRecommendations(){
+    try {
+      const r = await fetch('/search/recommendations', { credentials:'include' });
+      if(!r.ok) return [];
+      return (await r.json()).tracks || [];
+    } catch(e) { return []; }
+  }
+
+  function renderSearchResults(tracks, label=''){
+    if(!tracks.length){
+      srEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">
+        <div style="font-size:24px;margin-bottom:6px">🔍</div>No results found
+      </div>`;
+      srEl.classList.add('open');
+      return;
+    }
+    if(label){
+      srEl.innerHTML = `<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--amber);opacity:0.7">${label}</div>`
+        + tracks.map(t=>`
+        <div class="search-result-item"
+          data-uri="${esc(t.uri)}" data-name="${esc(t.name)}" data-artist="${esc(t.artist)}"
+          data-art="${esc(t.album_art_url||'')}" data-dur="${t.duration_ms||0}">
+          <img class="search-result-art" src="${esc(t.album_art_url||'')}" alt="" onerror="this.style.display='none'">
+          <div class="search-result-info">
+            <div class="search-result-name">${esc(t.name)}</div>
+            <div class="search-result-artist">${esc(t.artist)}</div>
+          </div>
+          <div class="add-btn">+</div>
+        </div>`).join('');
+    } else {
+      srEl.innerHTML = tracks.map(t=>`
+        <div class="search-result-item"
+          data-uri="${esc(t.uri)}" data-name="${esc(t.name)}" data-artist="${esc(t.artist)}"
+          data-art="${esc(t.album_art_url||'')}" data-dur="${t.duration_ms||0}">
+          <img class="search-result-art" src="${esc(t.album_art_url||'')}" alt="" onerror="this.style.display='none'">
+          <div class="search-result-info">
+            <div class="search-result-name">${esc(t.name)}</div>
+            <div class="search-result-artist">${esc(t.artist)}</div>
+          </div>
+          <div class="add-btn">+</div>
+        </div>`).join('');
+    }
+    srEl.classList.add('open');
+  }
+
+  // Use event delegation on srEl — survives innerHTML replacements
+  srEl.addEventListener('click', async (e)=>{
+    const item = e.target.closest('.search-result-item');
+    if(!item) return;
+    srEl.classList.remove('open');
+    qSearch.value='';
+    // Show inline spinner
+    srEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="display:inline-block;width:12px;height:12px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite"></span>
+      Finding on YouTube…
+    </div>`;
+    srEl.classList.add('open');
+    const vid = await resolveYTServerSide(item.dataset.uri);
+    srEl.classList.remove('open');
+    if(!vid){
+      toast('Not found on YouTube — try a different search 🙄','error');
+      return;
+    }
+    sc.emit('add_to_queue', {
+      room_id:roomId,
+      track_uri: vid,
+      track_name: item.dataset.name,
+      artist: item.dataset.artist,
+      album_art_url: item.dataset.art,
+      duration_ms: parseInt(item.dataset.dur)||0
+    });
+    toast(`➕ Queued: ${item.dataset.name}`, 'success');
+  });
+
+  // Show recommendations on focus when search is empty
+  qSearch?.addEventListener('focus', async ()=>{
+    if(qSearch.value.trim()) return;
+    const recs = await loadRecommendations();
+    if(recs.length) renderSearchResults(recs, '🔥 Trending Now');
+  });
 
   qSearch?.addEventListener('input', debounce(async e=>{
     const q = e.target.value.trim();
-    if(!q){ srEl.classList.remove('open'); return; }
-    const tracks = await searchTracks(q);
-    if(!tracks.length){
-      srEl.innerHTML=`<div style="padding:12px;text-align:center;color:var(--text-3);font-size:12px">No results</div>`;
-      srEl.classList.add('open'); return;
+    if(!q){
+      // On clear, show recommendations
+      const recs = await loadRecommendations();
+      if(recs.length) renderSearchResults(recs, '🔥 Trending Now');
+      else srEl.classList.remove('open');
+      return;
     }
-    srEl.innerHTML = tracks.map(t=>`
-      <div class="search-result-item"
-        data-uri="${esc(t.uri)}" data-name="${esc(t.name)}" data-artist="${esc(t.artist)}"
-        data-art="${esc(t.album_art_url||'')}" data-dur="${t.duration_ms||0}">
-        <img class="search-result-art" src="${esc(t.album_art_url||'')}" alt="" onerror="this.src=''">
-        <div class="search-result-info">
-          <div class="search-result-name">${esc(t.name)}</div>
-          <div class="search-result-artist">${esc(t.artist)}</div>
-        </div>
-        <div class="add-btn">+</div>
-      </div>`).join('');
+    // Show loading skeleton
+    srEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="display:inline-block;width:12px;height:12px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite"></span>
+      Searching…
+    </div>`;
     srEl.classList.add('open');
-
-    srEl.querySelectorAll('.search-result-item').forEach(el=>{
-      el.addEventListener('click', async ()=>{
-        srEl.classList.remove('open'); qSearch.value='';
-        // Show inline loading state immediately
-        srEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px"><span style="display:inline-block;width:12px;height:12px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite"></span> Finding on YouTube…</div>`;
-        srEl.classList.add('open');
-        const vid = await resolveYT(el.dataset.uri);
-        srEl.classList.remove('open');
-        if(!vid){ toast('Not found on YouTube. Try another.','error'); return; }
-        sc.emit('add_to_queue', { room_id:roomId, track_uri:vid, track_name:el.dataset.name, artist:el.dataset.artist, album_art_url:el.dataset.art, duration_ms:parseInt(el.dataset.dur)||0 });
-        toast(`Queued: ${el.dataset.name}`, 'success');
-      });
-    });
+    const tracks = await searchTracks(q);
+    renderSearchResults(tracks);
   }, 350));
 
   document.addEventListener('click', e=>{ if(!e.target.closest('#q-search-wrap')) srEl.classList.remove('open'); });
