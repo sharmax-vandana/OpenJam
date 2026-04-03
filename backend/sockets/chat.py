@@ -32,7 +32,7 @@ def register_chat_handlers(sio: socketio.AsyncServer):
 
     @sio.event
     async def send_chat(sid, data):
-        """Frontend emits 'send_chat' with { message: '...' }"""
+        """Frontend emits 'send_chat' with { room_id, message }"""
         session = await sio.get_session(sid)
         if not session:
             return
@@ -42,13 +42,16 @@ def register_chat_handlers(sio: socketio.AsyncServer):
         if not content or len(content) > 500:
             return
 
-        info = room_manager.get_user_by_sid(sid)
-        if not info:
-            return
+        # Prefer room_id from payload; fall back to room_manager lookup
+        room_id = data.get("room_id")
+        if not room_id:
+            info = room_manager.get_user_by_sid(sid)
+            if not info:
+                return
+            room_id = info["room_id"]
 
-        room_id = info["room_id"]
         user_id = session.get("user_id") or f"guest_{sid}"
-        display_name = session.get("display_name", "Jammer")
+        display_name = session.get("display_name") or data.get("display_name") or "Jammer"
         avatar_url = session.get("avatar_url")
 
         msg_dict = await asyncio.to_thread(
@@ -56,6 +59,7 @@ def register_chat_handlers(sio: socketio.AsyncServer):
         )
 
         await sio.emit("chat_message", msg_dict, room=room_id)
+
 
     @sio.event
     async def chat_message(sid, data):
