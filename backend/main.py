@@ -63,8 +63,19 @@ async def startup():
 
 @app.get("/health")
 async def health():
-    logger.debug("Health check requested")
-    return JSONResponse({"status": "ok", "app": "Open Jam"})
+    from backend.services.room_manager import room_manager
+    from backend.services.room_closer import cancel_room_close
+    active_rooms = room_manager.get_active_room_ids()
+    # Keepalive: cancel pending close timers for any room that still has listeners
+    for room_id in active_rooms:
+        if room_manager.get_listener_count(room_id) > 0:
+            cancel_room_close(room_id)
+    return JSONResponse({
+        "status": "ok",
+        "app": "Open Jam",
+        "active_rooms": len(active_rooms),
+    })
+
 
 
 @app.get("/")
