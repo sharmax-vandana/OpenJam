@@ -20,9 +20,15 @@ def _db_add_and_get_queue(room_id: str, track_data: dict, user_id: str, display_
             raise ValueError("Queue is locked by host")
 
         queue_manager.add_track(db, room_id, track_data, user_id, display_name)
+        
+        # Cross-check DB status with live memory to prevent accidental autoplay interrupts
+        from backend.services.room_manager import room_manager
+        live_playback = room_manager.get_playback(room_id)
+        is_playing_live = live_playback and live_playback.get("is_playing", False)
         now_playing = queue_manager.get_now_playing(db, room_id)
+        
         next_item = None
-        if not now_playing:
+        if not now_playing and not is_playing_live:
             next_item = queue_manager.advance_queue(db, room_id)
         queue = queue_manager.get_queue(db, room_id, None)
         return queue, next_item

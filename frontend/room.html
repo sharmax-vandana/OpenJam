@@ -496,7 +496,7 @@ function _mobMarkUnread() {
   function renderQueue(q){
     const list = $('#queue-list');
     const empty = $('#q-empty');
-    const pending = (q||[]).filter(i=>i.status==='pending');
+    const pending = (q||[]).filter(i=>i.status!=='played');
     $('#q-count').textContent = `${pending.length} track${pending.length!==1?'s':''}`;
 
     if(!pending.length){ list.innerHTML=''; list.appendChild(empty); empty.style.display='flex'; return; }
