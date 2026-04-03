@@ -53,6 +53,14 @@ async def search_tracks(q: str = ""):
     return {"tracks": tracks}
 
 
+@router.get("/queue/{room_id}")
+async def get_queue(room_id: str, db: Session = Depends(get_db)):
+    """Lightweight queue fetch — used by the frontend 3s poll fallback."""
+    queue = queue_manager.get_queue(db, room_id, None)
+    return {"queue": queue}
+
+
+
 @router.get("/search/resolve")
 async def resolve_youtube(q: str = ""):
     """Resolve a YouTube video ID from a search query — runs server-side so the API key is never exposed."""

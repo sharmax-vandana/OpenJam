@@ -901,18 +901,22 @@ function _mobMarkUnread() {
   $('#chat-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
 
   /* ─── Queue Poll Fallback ────────────────────────────── */
-  // Belt-and-suspenders: if a socket queue_updated event is ever missed,
-  // re-fetch from REST every 5 seconds and re-render silently.
+  let _lastQueueLen = -1; // Track previous count to avoid redundant renders
   async function pollQueue(){
     try {
-      const r = await fetch(`/rooms/${roomId}`, { credentials:'include' });
-      if(r.ok){
-        const d = await r.json();
-        if(Array.isArray(d.queue)) renderQueue(d.queue);
+      const r = await fetch(`/queue/${roomId}`, { credentials:'include' });
+      if(!r.ok) return;
+      const d = await r.json();
+      if(!Array.isArray(d.queue)) return;
+      const fresh = d.queue.filter(i => i.status !== 'played');
+      // Only re-render if count changed OR first run
+      if(fresh.length !== _lastQueueLen){
+        _lastQueueLen = fresh.length;
+        renderQueue(d.queue);
       }
     } catch(_){}
   }
-  setInterval(pollQueue, 5000);
+  setInterval(pollQueue, 3000); // Poll every 3s as fallback for missed socket events
 
   // On socket reconnect, immediately re-join and re-fetch queue
   sc.socket && sc.socket.on('connect', () => {
