@@ -92,37 +92,6 @@ body {
 }
 .dynamic-bg.active { opacity: 0.35; }
 
-/* ---- Emoji Reactions ---- */
-.reaction-container {
-  display: flex; gap: 8px; margin-left: 12px;
-}
-.btn-reaction {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 50%; width: 36px; height: 36px; font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
-  transition: all var(--t-spring);
-}
-.btn-reaction:hover {
-  transform: translateY(-4px) scale(1.1); background: var(--bg-elevated); border-color: var(--border-focus);
-}
-.btn-reaction:active {
-  transform: translateY(0) scale(0.9);
-}
-@media (max-width: 640px) {
-  .reaction-container { margin-left: 0; position: absolute; right: 16px; top: -18px; transform: translateY(-100%); }
-  .btn-reaction { width: 44px; height: 44px; font-size: 20px; box-shadow: 0 4px 12px var(--shadow-sm); }
-}
-
-.floating-emoji {
-  position: fixed; bottom: 80px; font-size: 28px; z-index: 100;
-  pointer-events: none; opacity: 0;
-  animation: floatUp 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-@keyframes floatUp {
-  0% { transform: translateY(0) scale(0.5); opacity: 0; }
-  15% { transform: translateY(-40px) scale(1.2); opacity: 1; }
-  100% { transform: translateY(-200px) scale(1); opacity: 0; }
-}
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 input  { font-family: inherit; }
 a { text-decoration: none; color: inherit; }
@@ -941,20 +910,7 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
   pointer-events: none;
 }
 
-/* ================================================================
-   REACTION ICONS — SVG STYLE
-   ================================================================ */
-.btn-reaction svg { width: 18px; height: 18px; }
-.btn-reaction { color: var(--text-2); }
-.btn-reaction:hover { color: var(--amber); }
-.btn-reaction[data-emoji="heart"] { color: #f87171; }
-.btn-reaction[data-emoji="fire"] { color: #fb923c; }
-.btn-reaction[data-emoji="vibe"] { color: #a78bfa; }
-.btn-reaction[data-emoji="chill"] { color: #38bdf8; }
-.btn-reaction[data-emoji="heart"]:hover { color: #ef4444; }
-.btn-reaction[data-emoji="fire"]:hover { color: #f97316; }
-.btn-reaction[data-emoji="vibe"]:hover { color: #8b5cf6; }
-.btn-reaction[data-emoji="chill"]:hover { color: #0ea5e9; }
+
 
 /* ================================================================
    EMPTY STATE — SVG ICON CLASS

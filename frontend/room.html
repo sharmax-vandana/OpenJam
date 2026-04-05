@@ -130,22 +130,6 @@
           Vote to Skip (0/0)
         </button>
       </div>
-
-      <!-- Reactions -->
-      <div class="reaction-container" id="reaction-tray">
-        <button class="btn-reaction" data-emoji="heart" title="Love">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        </button>
-        <button class="btn-reaction" data-emoji="fire" title="Fire">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
-        </button>
-        <button class="btn-reaction" data-emoji="vibe" title="Vibe">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-        </button>
-        <button class="btn-reaction" data-emoji="chill" title="Chill">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.41-1.42L17.83 13H22v-2z"/></svg>
-        </button>
-      </div>
     </div>
 
     <!-- Volume (everyone) -->
@@ -422,7 +406,7 @@ function _mobMarkUnread() {
     if(mobTab){ const lbl = mobTab.querySelector('.mob-tab-label'); if(lbl) lbl.textContent = count > 0 ? `People (${count})` : 'People'; }
     if(d.listeners) updateMembers(d.listeners);
   });
-  sc.on('room_reaction',  d => { if(d.emoji) spawnEmoji(d.emoji); });
+
   sc.on('user_joined',    d => toast(`${d.display_name} joined`, 'info'));
   sc.on('user_left',      d => toast(`${d.display_name} left`, 'info'));
   sc.on('room_closed',    d => { toast(d?.reason || 'Room closed', 'info'); setTimeout(()=>location.href='/', 2500); });
@@ -692,39 +676,7 @@ function _mobMarkUnread() {
     }
   }
 
-  /* ─── Reactions ────────────────────────────────────────── */
-  $$('.btn-reaction').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const emoji = btn.dataset.emoji;
-      sc.emit('reaction', { room_id: roomId, emoji });
-    });
-  });
 
-  const REACTION_EMOJI_MAP = { heart: '❤️', fire: '🔥', vibe: '🎵', chill: '❄️' };
-
-  function spawnEmoji(emoji) {
-    const el = document.createElement('div');
-    el.className = 'floating-emoji';
-    el.textContent = REACTION_EMOJI_MAP[emoji] || emoji;
-    
-    // Randomize starting X position and animation duration slightly
-    const randomX = Math.floor(Math.random() * 80) - 40; // -40px to +40px from center
-    const randomDur = 2 + Math.random(); // 2s to 3s
-    
-    // Spawn roughly above the reaction tray (center-left on desktop, bottom-right on mobile)
-    const isMobile = window.innerWidth <= 640;
-    if (isMobile) {
-      el.style.right = (32 + Math.random()*20) + 'px';
-      el.style.bottom = '80px';
-    } else {
-      el.style.left = (300 + randomX) + 'px'; // Assuming tray is roughly here
-      el.style.bottom = '80px';
-    }
-    
-    el.style.animation = `floatUp ${randomDur}s cubic-bezier(0.2, 0.8, 0.2, 1) forwards`;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), randomDur * 1000);
-  }
 
   async function searchTracks(q){
     const r = await fetch(`/search/tracks?q=${encodeURIComponent(q)}`, { credentials:'include' });
@@ -902,14 +854,7 @@ function _mobMarkUnread() {
     }
   });
 
-  $('#btn-invite')?.addEventListener('click', async ()=>{
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      toast('Room link copied to clipboard! 📋', 'success');
-    } catch(e) {
-      toast('Failed to copy room link', 'error');
-    }
-  });
+
 
   /* ─── Volume ─────────────────────────────────────────── */
   function applyVol(v){
@@ -972,11 +917,7 @@ function _mobMarkUnread() {
   }
   setInterval(pollQueue, 3000); // Poll every 3s as fallback for missed socket events
 
-  // On socket reconnect, immediately re-join and re-fetch queue
-  sc.socket && sc.socket.on('connect', () => {
-    sc.joinRoom(roomId);
-    setTimeout(pollQueue, 500);
-  });
+
 
   /* ─── Init ───────────────────────────────────────────── */
 

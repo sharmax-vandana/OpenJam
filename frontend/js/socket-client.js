@@ -13,7 +13,7 @@ class SocketClient {
     if (this.socket) return; // already created
 
     const token = this._getCookie('session_token');
-    const guestName = localStorage.getItem('openjam_guest_name') || '';
+    const guestName = localStorage.getItem('openjam_display_name') || '';
 
     this.socket = io({
       path: '/socket.io',
@@ -42,8 +42,7 @@ class SocketClient {
       'queue_updated', 'queue_error',
       'playback_sync', 'track_changed',
       'listener_count', 'room_closed',
-      'name_updated', 'room_reaction',
-      'reaction', 'skip_votes_updated',
+      'name_updated', 'skip_votes_updated',
     ];
     events.forEach(event => {
       this.socket.on(event, (data) => {
