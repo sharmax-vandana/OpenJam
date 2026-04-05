@@ -1,4 +1,4 @@
-"""Socket.IO playback synchronization handlers — democratic control (any member can play/pause/skip)."""
+"""Socket.IO playback synchronization handlers."""
 
 import asyncio
 import socketio
@@ -92,8 +92,6 @@ async def _playback_sync_loop(room_id: str, sio: socketio.AsyncServer):
 def ensure_sync_loop(room_id: str, sio: socketio.AsyncServer):
     if room_id not in _sync_tasks or _sync_tasks[room_id].done():
         _sync_tasks[room_id] = asyncio.create_task(_playback_sync_loop(room_id, sio))
-
-
 
 
 def stop_sync_loop(room_id: str):

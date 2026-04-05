@@ -364,7 +364,7 @@ const YOUTUBE_API_KEY = window.YOUTUBE_API_KEY || '';
         searchResults.classList.remove('active');
         searchInput.value = '';
 
-        showToast('Finding on YouTube... 🎵', 'info');
+        showToast('Finding on YouTube...', 'info');
         let videoId = null;
         if (YOUTUBE_API_KEY) {
           videoId = await API.resolveYouTubeId(query, YOUTUBE_API_KEY);
@@ -487,7 +487,7 @@ const YOUTUBE_API_KEY = window.YOUTUBE_API_KEY || '';
   });
 
   socketClient.on('user_joined', (data) => {
-    showToast(`${data.display_name} joined 🎧`, 'info');
+    showToast(`${data.display_name} joined`, 'info');
   });
 
   socketClient.on('user_left', (data) => {

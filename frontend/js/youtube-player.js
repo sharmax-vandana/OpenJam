@@ -1,7 +1,6 @@
 /* ========================================
    OPEN JAM — YouTube Player
    Full-length playback via YouTube IFrame API
-   Replaces spotify-player.js
    ======================================== */
 
 class YouTubePlayer {
@@ -116,7 +115,7 @@ class YouTubePlayer {
         ">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="#000"><path d="M8 5v14l11-7z"/></svg>
         </div>
-        <div style="font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; color:#f5f0eb; margin-bottom:8px;">
+        <div style="font-family:'Righteous',cursive; font-size:20px; font-weight:700; color:#f5f0eb; margin-bottom:8px;">
           Tap to listen
         </div>
         <div style="font-size:14px; color:#9e958a; max-width:260px; text-align:center; line-height:1.5;">

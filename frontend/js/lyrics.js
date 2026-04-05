@@ -47,8 +47,7 @@ class LyricsManager {
 
       this.parseLRC(data.syncedLyrics);
       this.render();
-    } catch (e) {
-      console.warn('Lyrics fetch failed:', e);
+    } catch {
       this.container.innerHTML = '<div class="lyric-error">No synced lyrics found for this track.</div>';
     } finally {
       this.isLoading = false;

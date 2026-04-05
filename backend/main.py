@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=settings.ALLOWED_ORIGINS,
-    logger=True,
+    logger=False,
     engineio_logger=False,
 )
 
@@ -75,7 +75,6 @@ async def health():
         "app": "Open Jam",
         "active_rooms": len(active_rooms),
     })
-
 
 
 @app.get("/")

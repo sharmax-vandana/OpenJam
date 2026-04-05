@@ -27,23 +27,13 @@ class SocketClient {
     });
 
     this.socket.on('connect', () => {
-      console.log('[Socket] Connected via', this.socket.io.engine.transport.name, '| SID:', this.socket.id);
       if (this.roomId) {
         this.socket.emit('join_room', { room_id: this.roomId });
       }
     });
 
-    this.socket.io.engine.on('upgrade', (transport) => {
-      console.log('[Socket] Transport upgraded to:', transport.name);
-    });
-
-    this.socket.on('disconnect', (reason) => {
-      console.warn('[Socket] Disconnected:', reason);
-    });
-
-    this.socket.on('connect_error', (err) => {
-      console.error('[Socket] Connection error:', err.message);
-    });
+    this.socket.on('disconnect', () => {});
+    this.socket.on('connect_error', () => {});
 
     // Wire all events to handler map
     const events = [
@@ -53,7 +43,7 @@ class SocketClient {
       'playback_sync', 'track_changed',
       'listener_count', 'room_closed',
       'name_updated', 'room_reaction',
-      'reaction',
+      'reaction', 'skip_votes_updated',
     ];
     events.forEach(event => {
       this.socket.on(event, (data) => {

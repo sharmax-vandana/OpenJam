@@ -83,12 +83,12 @@
       localStorage.setItem('openjam_display_name', name);
       showUserInNav(name);
       hideNamePrompt();
-      showToast(`Welcome, ${name}! 🎵`, 'success');
+      showToast(`Welcome, ${name}!`, 'success');
     } catch (err) {
       showToast('Failed to join. Try again.', 'error');
     } finally {
       enterBtn.disabled = false;
-      enterBtn.textContent = '🎧 Enter the Jam';
+      enterBtn.textContent = 'Enter the Jam';
     }
   }
 

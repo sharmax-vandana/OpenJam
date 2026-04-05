@@ -1,10 +1,13 @@
-"""Socket.IO queue event handlers — non-blocking DB via asyncio.to_thread()."""
+"""Socket.IO queue event handlers."""
 
 import asyncio
 import socketio
 from backend.database import SessionLocal
+from backend.logger import get_logger
 from backend.services.room_manager import room_manager
 from backend.services.queue_manager import queue_manager
+
+logger = get_logger(__name__)
 
 
 def _db_add_and_get_queue(room_id: str, track_data: dict, user_id: str, display_name: str):
@@ -87,7 +90,7 @@ def register_queue_handlers(sio: socketio.AsyncServer):
             await sio.emit("queue_error", {"message": str(ve)}, to=sid)
             return
         except Exception as e:
-            print(f"[queue] add_to_queue error: {e}")
+            logger.error(f"add_to_queue error: {e}")
             return
 
         # Auto-play: if a first track was found, emit track_changed and start sync loop
@@ -135,7 +138,7 @@ def register_queue_handlers(sio: socketio.AsyncServer):
         try:
             queue = await asyncio.to_thread(_db_vote_track, room_id, queue_item_id, user_id)
         except Exception as e:
-            print(f"[queue] vote_track error: {e}")
+            logger.error(f"vote_track error: {e}")
             return
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)

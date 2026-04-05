@@ -1,12 +1,15 @@
-"""Socket.IO connection and room join/leave handlers — non-blocking DB via asyncio.to_thread()."""
+"""Socket.IO connection and room join/leave handlers."""
 
 import asyncio
 import socketio
 from backend.database import SessionLocal
+from backend.logger import get_logger
 from backend.models.chat_message import ChatMessage
 from backend.services.room_manager import room_manager
 from backend.services.queue_manager import queue_manager
 from backend.services.room_closer import schedule_room_close, cancel_room_close
+
+logger = get_logger(__name__)
 
 
 def _db_get_join_data(room_id: str) -> tuple:
@@ -72,7 +75,7 @@ def register_connection_handlers(sio: socketio.AsyncServer):
             "avatar_url": None,
             "is_guest": True,
         })
-        print(f"[conn] Connected {sid} as '{display_name}'")
+        logger.info(f"Connected {sid} as '{display_name}'")
 
     @sio.event
     async def disconnect(sid):
@@ -177,4 +180,4 @@ def register_connection_handlers(sio: socketio.AsyncServer):
             }, room=room_id)
 
         await sio.emit("name_updated", {"display_name": new_name}, to=sid)
-        print(f"[conn] {sid} renamed to '{new_name}'")
+        logger.info(f"{sid} renamed to '{new_name}'")
