@@ -137,6 +137,34 @@ def register_playback_handlers(sio: socketio.AsyncServer):
         await sio.emit("playback_sync", room_manager.get_playback(room_id), room=room_id, skip_sid=sid)
 
     @sio.event
+    async def vote_skip(sid, data):
+        session = await sio.get_session(sid)
+        if not session:
+            return
+        
+        info = room_manager.get_user_by_sid(sid)
+        if not info:
+            return
+        room_id = info["room_id"]
+        user_id = session.get("user_id") or f"guest_{sid}"
+
+        # If user is host, just execute next_track directly
+        if room_manager.is_host(room_id, sid):
+            await next_track(sid, data)
+            return
+
+        added = room_manager.add_skip_vote(room_id, user_id)
+        if added:
+            votes = room_manager.get_skip_votes(room_id)
+            listeners = room_manager.get_listener_count(room_id)
+            if listeners > 0 and (votes / listeners) > 0.5:
+                # threshold reached, skip!
+                await next_track(sid, {"room_id": room_id})
+            else:
+                # broadcast vote update
+                await sio.emit("skip_votes_updated", {"votes": votes, "required": (listeners // 2) + 1}, room=room_id)
+
+    @sio.event
     async def next_track(sid, data):
         """Any jam member can skip to the next track."""
         info = room_manager.get_user_by_sid(sid)

@@ -9,13 +9,13 @@
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
 
   <!-- Optimization: Preconnect to YouTube APIs -->
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://www.googleapis.com">
 
-  <link rel="stylesheet" href="/static/css/style.css?v=3">
+  <link rel="stylesheet" href="/static/css/style.css?v=4">
 </head>
 <body>
   <!-- Dynamic Audio-Visual Backdrop -->
@@ -71,12 +71,15 @@
   <!-- LEFT — Now Playing -->
   <div class="panel-left" id="panel-left">
     <div class="np-top">
-      <div class="np-label">
-        <div class="eq" id="np-eq" style="display:none">
-          <div class="eq-bar"></div><div class="eq-bar"></div>
-          <div class="eq-bar"></div><div class="eq-bar"></div>
+      <div class="np-label" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <div style="display:flex; align-items:center;">
+          <div class="eq" id="np-eq" style="display:none; margin-right:8px;">
+            <div class="eq-bar"></div><div class="eq-bar"></div>
+            <div class="eq-bar"></div><div class="eq-bar"></div>
+          </div>
+          <span>Now Playing</span>
         </div>
-        <span>Now Playing</span>
+        <button class="btn-toggle-lyrics" id="btn-toggle-lyrics">Lyrics</button>
       </div>
 
       <div class="art-wrap">
@@ -84,6 +87,14 @@
         <img class="art-img" id="art-img"
           src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'%3E%3C/svg%3E"
           alt="Album art">
+        <!-- New Lyrics View Overlay -->
+        <div class="lyrics-view" id="lyrics-view" style="display:none;">
+           <div class="lyrics-content" id="lyrics-content"></div>
+        </div>
+        <!-- Album Art Empty Placeholder -->
+        <div class="art-placeholder" id="art-placeholder">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </div>
       </div>
 
       <div class="np-title" id="np-title">Nothing playing</div>
@@ -114,16 +125,26 @@
       </div>
       <!-- MEMBER info (non-host) -->
       <div class="controls-locked" id="controls-locked">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M12 1C8.676 1 6 3.676 6 7v1H4v15h16V8h-2V7c0-3.324-2.676-6-6-6zm0 2c2.276 0 4 1.724 4 4v1H8V7c0-2.276 1.724-4 4-4zm0 9a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg>
-        Host controls playback
+        <button class="btn-vote-skip" id="btn-vote-skip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg>
+          Vote to Skip (0/0)
+        </button>
       </div>
 
       <!-- Reactions -->
       <div class="reaction-container" id="reaction-tray">
-        <button class="btn-reaction" data-emoji="❤️" title="Love">❤️</button>
-        <button class="btn-reaction" data-emoji="🔥" title="Fire">🔥</button>
-        <button class="btn-reaction" data-emoji="🕺" title="Vibe">🕺</button>
-        <button class="btn-reaction" data-emoji="🧊" title="Chill">🧊</button>
+        <button class="btn-reaction" data-emoji="heart" title="Love">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </button>
+        <button class="btn-reaction" data-emoji="fire" title="Fire">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
+        </button>
+        <button class="btn-reaction" data-emoji="vibe" title="Vibe">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </button>
+        <button class="btn-reaction" data-emoji="chill" title="Chill">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.41-1.42L17.83 13H22v-2z"/></svg>
+        </button>
       </div>
     </div>
 
@@ -186,7 +207,7 @@
       <div class="chat-header">Room Chat</div>
       <div class="chat-messages" id="chat-msgs">
         <div class="empty" id="chat-empty">
-          <div class="empty-icon">💬</div>
+          <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
           <div class="empty-title">No messages yet</div>
           <div class="empty-sub">Say hi to the room!</div>
         </div>
@@ -308,6 +329,7 @@ function _mobMarkUnread() {
 </script>
 <script src="/static/js/youtube-player.js"></script>
 <script src="/static/js/socket-client.js"></script>
+<script src="/static/js/lyrics.js"></script>
 <script>
 /* ── Room Controller ──────────────────────────────────────── */
 (async () => {
@@ -322,8 +344,23 @@ function _mobMarkUnread() {
   let vol = 80;
   let _currentTrackUri = null; // track when URI truly changes to avoid reload loops
 
-  /* ─── YouTube Player ─────────────────────────────────── */
+  /* ─── YouTube Player & Lyrics ────────────────────────── */
   const yt = new YouTubePlayer();
+  const lyricsManager = new LyricsManager($('#lyrics-content'));
+
+  $('#btn-toggle-lyrics')?.addEventListener('click', () => {
+    const view = $('#lyrics-view');
+    const btn = $('#btn-toggle-lyrics');
+    const isVisible = view.style.display !== 'none';
+    view.style.display = isVisible ? 'none' : 'flex';
+    btn.classList.toggle('active', !isVisible);
+  });
+
+  $('#btn-vote-skip')?.addEventListener('click', () => {
+    sc.emit('vote_skip', { room_id: roomId });
+    $('#btn-vote-skip').disabled = true;
+  });
+
   yt.setControlCallback((action, extra={}) => {
     if(!isHost) return; // only host fires socket events
     const pos = extra.position_ms ?? yt.positionMs;
@@ -347,6 +384,11 @@ function _mobMarkUnread() {
 
   /* ─── Socket ─────────────────────────────────────────── */
   const sc = new SocketClient();
+  sc.on('skip_votes_updated', d => {
+    const btn = $('#btn-vote-skip');
+    if(btn) btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg> Vote to Skip (${d.votes}/${d.required})`;
+  });
+
   sc.on('playback_sync',  d => {
     if (d?.track_uri) {
       if (!isHost) {
@@ -479,6 +521,7 @@ function _mobMarkUnread() {
       artImg.classList.remove('spinning'); vinyl.classList.remove('spinning');
       if(eq) eq.style.display='none';
       if(ambient) ambient.classList.remove('active');
+      const ph = $('#art-placeholder'); if(ph) ph.classList.remove('hidden');
       setPlayIcon(false);
       clearInterval(progressInterval);
       $('#progress').style.width='0%';
@@ -493,6 +536,7 @@ function _mobMarkUnread() {
       const dynBg = $('#dynamic-bg');
       if(dynBg) { dynBg.src = track.album_art_url; dynBg.classList.add('active'); }
       if(ambient){ ambient.style.backgroundImage=`url(${track.album_art_url})`; ambient.classList.add('active'); }
+      const ph = $('#art-placeholder'); if(ph) ph.classList.add('hidden');
     }
 
     const playing = track.is_playing !== false;
@@ -501,10 +545,17 @@ function _mobMarkUnread() {
     if(eq) eq.style.display = playing ? 'flex' : 'none';
     setPlayIcon(playing);
 
+    const btnSkip = $('#btn-vote-skip');
+    if(btnSkip) {
+        btnSkip.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg> Vote to Skip (0/0)`;
+        btnSkip.disabled = false;
+    }
+
     // Only reload YT player when the actual video ID changes
     if(track.track_uri !== _currentTrackUri){
       _currentTrackUri = track.track_uri;
       yt.setTrack({ track_uri:track.track_uri, position_ms:track.position_ms||0, duration_ms:track.duration_ms||0, is_playing:playing });
+      lyricsManager.loadLyrics(track.track_name, track.artist, track.track_uri);
     }
 
     // Progress ticker
@@ -524,6 +575,7 @@ function _mobMarkUnread() {
     $('#time-cur').textContent = fmt(pos);
     $('#time-dur').textContent = fmt(dur);
     $('#progress').style.width = dur ? `${(pos/dur)*100}%` : '0%';
+    lyricsManager.sync(pos);
   }
 
   function setPlayIcon(playing){
@@ -542,7 +594,7 @@ function _mobMarkUnread() {
     if(!allItems.length){
       list.innerHTML = `
         <div class="empty" id="q-empty">
-          <div class="empty-icon">🎶</div>
+          <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
           <div class="empty-title">Queue is empty</div>
           <div class="empty-sub">Search above to add a track</div>
         </div>`;
@@ -648,10 +700,12 @@ function _mobMarkUnread() {
     });
   });
 
+  const REACTION_EMOJI_MAP = { heart: '❤️', fire: '🔥', vibe: '🎵', chill: '❄️' };
+
   function spawnEmoji(emoji) {
     const el = document.createElement('div');
     el.className = 'floating-emoji';
-    el.textContent = emoji;
+    el.textContent = REACTION_EMOJI_MAP[emoji] || emoji;
     
     // Randomize starting X position and animation duration slightly
     const randomX = Math.floor(Math.random() * 80) - 40; // -40px to +40px from center

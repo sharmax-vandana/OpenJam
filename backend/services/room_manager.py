@@ -24,6 +24,7 @@ class RoomManager:
                     "duration_ms": 0,
                     "is_playing": False,
                     "updated_at": None,
+                    "skip_voters": set(),
                 },
             }
         self._rooms[room_id]["users"][user_id] = {
@@ -84,6 +85,12 @@ class RoomManager:
     def update_playback(self, room_id: str, track_uri: str, track_name: str, artist: str,
                         album_art_url: str, position_ms: int, duration_ms: int, is_playing: bool):
         if room_id in self._rooms:
+            # Carry over old skip voters if the track uri hasn't changed (just a pause/play/seek update)
+            old_pb = self._rooms[room_id].get("playback", {})
+            skip_voters = set()
+            if old_pb and old_pb.get("track_uri") == track_uri:
+                skip_voters = old_pb.get("skip_voters", set())
+
             self._rooms[room_id]["playback"] = {
                 "track_uri": track_uri,
                 "track_name": track_name,
@@ -93,6 +100,7 @@ class RoomManager:
                 "duration_ms": duration_ms,
                 "is_playing": is_playing,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
+                "skip_voters": skip_voters,
             }
 
     def get_playback(self, room_id: str) -> dict | None:
@@ -105,6 +113,23 @@ class RoomManager:
         for room_data in self._rooms.values():
             if user_id in room_data["users"]:
                 room_data["users"][user_id]["display_name"] = new_name
+
+    def add_skip_vote(self, room_id: str, user_id: str) -> bool:
+        """Returns True if the vote was added, False if already voted."""
+        if room_id in self._rooms:
+            pb = self._rooms[room_id].get("playback")
+            if pb and user_id not in pb.get("skip_voters", set()):
+                pb["skip_voters"].add(user_id)
+                return True
+        return False
+
+    def get_skip_votes(self, room_id: str) -> int:
+        if room_id in self._rooms:
+            pb = self._rooms[room_id].get("playback")
+            if pb:
+                return len(pb.get("skip_voters", set()))
+        return 0
+
 
 
 room_manager = RoomManager()
