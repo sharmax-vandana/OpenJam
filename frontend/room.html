@@ -142,6 +142,18 @@
       <span class="vol-pct" id="vol-pct">80%</span>
     </div>
 
+    <!-- Emoji Reactions -->
+    <div class="reactions-row">
+      <div class="reaction-buttons" id="reaction-buttons">
+        <button class="reaction-btn" data-emoji="🔥">🔥</button>
+        <button class="reaction-btn" data-emoji="❤️">❤️</button>
+        <button class="reaction-btn" data-emoji="😂">😂</button>
+        <button class="reaction-btn" data-emoji="👏">👏</button>
+        <button class="reaction-btn" data-emoji="😮">😮</button>
+        <button class="reaction-btn" data-emoji="😢">😢</button>
+      </div>
+    </div>
+
     <!-- Hidden YouTube player -->
     <div id="youtube-player-container" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0"></div>
   </div>
@@ -262,6 +274,32 @@ function toast(msg,type='info'){
 }
 function toggleMembers(){ $('#members-panel')?.classList.toggle('collapsed'); }
 
+/* ── Reaction System ───────────────────────────────────── */
+let lastReactionTime = 0;
+function showFloatingReaction(emoji) {
+  const container = $('#panel-left'); // Float over the Now Playing section
+  if (!container) return;
+
+  const reaction = document.createElement('div');
+  reaction.className = 'floating-reaction';
+  reaction.textContent = emoji;
+
+  // Random horizontal position within the container
+  const containerRect = container.getBoundingClientRect();
+  const randomX = Math.random() * (containerRect.width - 100) + 50; // Keep within bounds
+  reaction.style.left = `${randomX}px`;
+  reaction.style.top = `${20 + Math.random() * 40}px`;
+
+  container.appendChild(reaction);
+
+  // Auto-remove after animation completes (3 seconds)
+  setTimeout(() => {
+    if (reaction.parentNode) {
+      reaction.remove();
+    }
+  }, 3000);
+}
+
 /* ── Mobile tab switching ──────────────────────────────────── */
 let _mobUnread = 0;
 function switchMobileTab(tab) {
@@ -319,11 +357,13 @@ function _mobMarkUnread() {
 (async () => {
   const YTKEY = window.YOUTUBE_API_KEY || '';
   const roomId = (location.pathname.match(/\/room\/([^/]+)/) || [])[1];
-  if(!roomId){ location.href='/'; return; }
+  console.log('[QUEUE-DEBUG] roomId from URL:', roomId, 'pathname:', location.pathname);
+  if(!roomId){ console.error('[QUEUE-DEBUG] no roomId found'); location.href='/'; return; }
 
   let me = null;          // current user object
   let roomData = null;    // full room data
-  let isHost = false;     // am I the room creator?
+  let isHost = false;     // am I the room host?
+  let currentHostUserId = null; // current host user ID
   let muted = false;
   let vol = 80;
   let _currentTrackUri = null; // track when URI truly changes to avoid reload loops
@@ -373,26 +413,42 @@ function _mobMarkUnread() {
     if(btn) btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg> Vote to Skip (${d.votes}/${d.required})`;
   });
 
+  sc.on('host_changed', d => {
+    toast(`${d.new_host_display_name} is now the host`, 'info');
+    // Update UI to reflect new host
+    applyHostUI();
+  });
+
   sc.on('playback_sync',  d => {
-    if (d?.track_uri) {
-      if (!isHost) {
-        // Update DISPLAY only (title/art/progress) — never re-loads the YT player
-        updateNPDisplay(d);
-        // Only hard-resync YT position if drift is significant (>3s)
-        const serverPos = d.position_ms || 0;
-        const clientPos = yt.positionMs || 0;
-        const drift = Math.abs(serverPos - clientPos);
-        if (drift > 3000) {
-          yt.syncPosition(serverPos, d.is_playing);
-        }
-      }
+    if (!d?.track_uri) return;
+    console.debug('playback_sync', d, 'currentVideoId', yt.currentVideoId, 'isPlaying', yt.isPlaying);
+    if (!yt.currentVideoId || yt.currentVideoId !== d.track_uri) {
+      // Load the current track for all listeners if not already loaded.
+      updateNP(d);
+    } else {
+      updateNPDisplay(d);
+    }
+    const serverPos = d.position_ms || 0;
+    const clientPos = yt.positionMs || 0;
+    const drift = Math.abs(serverPos - clientPos);
+    if (drift > 3000 || (d.is_playing && !yt.isPlaying)) {
+      yt.syncPosition(serverPos, d.is_playing);
     }
   });
   sc.on('track_changed',  d => {
+    console.debug('track_changed', d);
     updateNP(d); // Full update — loads new track into YT
     if(d) toast(`▶ ${d.track_name}`, 'success');
   });
-  sc.on('queue_updated',  d => renderQueue(d.queue));
+  sc.on('queue_updated',  d => {
+    console.log('[QUEUE-DEBUG] socket queue_updated event:', d);
+    if (!Array.isArray(d?.queue)) {
+      console.error('[QUEUE-DEBUG] queue_updated but d.queue is not array!', typeof d?.queue, d?.queue);
+      return;
+    }
+    console.log('[QUEUE-DEBUG] queue_updated has', d.queue.length, 'items, calling renderQueue()');
+    renderQueue(d.queue);
+  });
   sc.on('chat_message',   d => addChat(d));
   sc.on('chat_history',   d => { if(d.messages?.length) d.messages.forEach(addChat); });
   sc.on('listener_count', d => {
@@ -405,12 +461,17 @@ function _mobMarkUnread() {
     const mobTab = $('#mob-tab-members');
     if(mobTab){ const lbl = mobTab.querySelector('.mob-tab-label'); if(lbl) lbl.textContent = count > 0 ? `People (${count})` : 'People'; }
     if(d.listeners) updateMembers(d.listeners);
+    if(d.host_user_id) {
+      currentHostUserId = d.host_user_id;
+      applyHostUI();
+    }
   });
 
   sc.on('user_joined',    d => toast(`${d.display_name} joined`, 'info'));
   sc.on('user_left',      d => toast(`${d.display_name} left`, 'info'));
   sc.on('room_closed',    d => { toast(d?.reason || 'Room closed', 'info'); setTimeout(()=>location.href='/', 2500); });
   sc.on('queue_error',    d => toast(d.message || 'Action blocked', 'error'));
+  sc.on('reaction_received', d => showFloatingReaction(d.emoji));
 
   /* ─── Auth ───────────────────────────────────────────── */
   async function checkAuth(){
@@ -441,7 +502,8 @@ function _mobMarkUnread() {
     $('#bar-host').textContent = `Hosted by ${room.host_name || 'Unknown'}`;
     $('#room-bar').style.display = 'flex';
 
-    isHost = !!(me && room.host_user_id === me.id);
+    // Set initial host (may be updated by listener_count event)
+    currentHostUserId = room.host_user_id;
     applyHostUI();
 
     if(room.current_track) updateNP(room.current_track);
@@ -450,6 +512,7 @@ function _mobMarkUnread() {
   }
 
   function applyHostUI(){
+    isHost = me && currentHostUserId === me.id;
     if(isHost){
       $('#btn-close').style.display = 'inline-flex';
       $('#controls-row').style.display = 'flex';
@@ -571,11 +634,15 @@ function _mobMarkUnread() {
   /* ─── Queue ──────────────────────────────────────────── */
   function renderQueue(q){
     const list = $('#queue-list');
-    if(!list) return;
+    if(!list) { console.error('[QUEUE-DEBUG] renderQueue but no #queue-list element!'); return; }
+    console.log('[QUEUE-DEBUG] renderQueue called with q:', q);
     const allItems = (q||[]).filter(i => i.status !== 'played');
-    $('#q-count').textContent = `${allItems.length} track${allItems.length !== 1 ? 's' : ''}`;
+    console.log('[QUEUE-DEBUG] after filter, allItems.length:', allItems.length);
+    const countEl = $('#q-count');
+    if(countEl) countEl.textContent = `${allItems.length} track${allItems.length !== 1 ? 's' : ''}`;
 
     if(!allItems.length){
+      console.log('[QUEUE-DEBUG] queue empty, showing empty state');
       list.innerHTML = `
         <div class="empty" id="q-empty">
           <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
@@ -589,6 +656,7 @@ function _mobMarkUnread() {
     const playing = allItems.filter(i => i.status === 'playing');
     const queued  = allItems.filter(i => i.status !== 'playing');
     const ordered = [...playing, ...queued];
+    console.log('[QUEUE-DEBUG] rendering', ordered.length, 'items (playing:', playing.length, 'queued:', queued.length + ')');
 
     list.innerHTML = ordered.map((item, idx) => {
       const isPlaying = item.status === 'playing';
@@ -686,11 +754,13 @@ function _mobMarkUnread() {
   async function resolveYTServerSide(query){
     // Server-side resolve: API key stays hidden, returns video ID
     try {
+      console.log('[QUEUE-DEBUG] resolveYT query:', query);
       const r = await fetch(`/search/resolve?q=${encodeURIComponent(query)}`, { credentials:'include' });
-      if(!r.ok) return null;
+      if(!r.ok) { console.warn('[QUEUE-DEBUG] resolveYT response not ok:', r.status); return null; }
       const d = await r.json();
+      console.log('[QUEUE-DEBUG] resolveYT response:', d);
       return d.video_id || null;
-    } catch(e) { return null; }
+    } catch(e) { console.error('[QUEUE-DEBUG] resolveYT error:', e); return null; }
   }
 
   async function loadRecommendations(){
@@ -753,17 +823,20 @@ function _mobMarkUnread() {
     const vid = await resolveYTServerSide(item.dataset.uri);
     srEl.classList.remove('open');
     if(!vid){
+      console.warn('[QUEUE-DEBUG] No video ID resolved for:', item.dataset.uri);
       toast('Not found on YouTube — try a different search 🙄','error');
       return;
     }
-    sc.emit('add_to_queue', {
+    const payload = {
       room_id:roomId,
       track_uri: vid,
       track_name: item.dataset.name,
       artist: item.dataset.artist,
       album_art_url: item.dataset.art,
       duration_ms: parseInt(item.dataset.dur)||0
-    });
+    };
+    console.log('[QUEUE-DEBUG] emit add_to_queue:', payload);
+    sc.emit('add_to_queue', payload);
     toast(`➕ Queued: ${item.dataset.name}`, 'success');
   });
 
@@ -854,6 +927,23 @@ function _mobMarkUnread() {
     }
   });
 
+  /* ─── Reaction Buttons ────────────────────────────────── */
+  const reactionButtons = $$('.reaction-btn');
+  reactionButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastReactionTime < 500) return; // Rate limit: 500ms between reactions
+      lastReactionTime = now;
+
+      const emoji = btn.dataset.emoji;
+      if (emoji) {
+        sc.sendReaction(emoji);
+        // Optional: Show local reaction immediately for better UX
+        showFloatingReaction(emoji);
+      }
+    });
+  });
+
 
 
   /* ─── Volume ─────────────────────────────────────────── */
@@ -900,20 +990,25 @@ function _mobMarkUnread() {
   $('#chat-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
 
   /* ─── Queue Poll Fallback ────────────────────────────── */
-  let _lastQueueLen = -1; // Track previous count to avoid redundant renders
+  let _lastQueueLen = -1;
+  let _lastQueueSignature = '';
   async function pollQueue(){
     try {
       const r = await fetch(`/queue/${roomId}`, { credentials:'include' });
-      if(!r.ok) return;
+      if(!r.ok) { console.warn('[QUEUE-DEBUG] pollQueue fetch failed:', r.status); return; }
       const d = await r.json();
-      if(!Array.isArray(d.queue)) return;
+      if(!Array.isArray(d.queue)) { console.error('[QUEUE-DEBUG] pollQueue but d.queue not array:', d.queue); return; }
       const fresh = d.queue.filter(i => i.status !== 'played');
-      // Only re-render if count changed OR first run
-      if(fresh.length !== _lastQueueLen){
-        _lastQueueLen = fresh.length;
+      const signature = fresh
+        .map(i => `${i.id}:${i.status}:${i.votes}:${i.track_uri}`)
+        .join('|');
+      console.log('[QUEUE-DEBUG] pollQueue count:', fresh.length, 'first item:', fresh[0] ? {id: fresh[0].id, name: fresh[0].track_name, uri: fresh[0].track_uri} : 'none');
+      if(signature !== _lastQueueSignature){
+        _lastQueueSignature = signature;
+        console.log('[QUEUE-DEBUG] queue changed, rendering');
         renderQueue(d.queue);
       }
-    } catch(_){}
+    } catch(e){ console.error('[QUEUE-DEBUG] pollQueue error:', e); }
   }
   setInterval(pollQueue, 3000); // Poll every 3s as fallback for missed socket events
 

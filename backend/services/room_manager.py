@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 class RoomManager:
     def __init__(self):
-        # {room_id: {users: {user_id: {sid, display_name, avatar_url}}, host_sid: str, playback: {...}}}
+        # {room_id: {users: {user_id: {sid, display_name, avatar_url, joined_at}}, host_sid: str, playback: {...}}}
         self._rooms: dict = {}
         # {sid: {user_id, room_id}}
         self._sid_map: dict = {}
@@ -31,6 +31,7 @@ class RoomManager:
             "sid": sid,
             "display_name": display_name,
             "avatar_url": avatar_url,
+            "joined_at": datetime.now(timezone.utc).isoformat(),
         }
         self._sid_map[sid] = {"user_id": user_id, "room_id": room_id}
 
@@ -75,6 +76,32 @@ class RoomManager:
             {"user_id": uid, "display_name": info["display_name"], "avatar_url": info["avatar_url"]}
             for uid, info in self._rooms[room_id]["users"].items()
         ]
+
+    def reassign_host(self, room_id: str) -> str | None:
+        """Reassign host to the earliest joined active user. Returns new host_sid or None."""
+        if room_id not in self._rooms:
+            return None
+        
+        users = self._rooms[room_id]["users"]
+        if not users:
+            self._rooms[room_id]["host_sid"] = None
+            return None
+        
+        # Find earliest joined user
+        earliest_user = min(users.items(), key=lambda x: x[1]["joined_at"])
+        new_host_sid = earliest_user[1]["sid"]
+        self._rooms[room_id]["host_sid"] = new_host_sid
+        return new_host_sid
+
+    def get_host_user_id(self, room_id: str) -> str | None:
+        """Get the user_id of the current host."""
+        if room_id not in self._rooms:
+            return None
+        host_sid = self._rooms[room_id]["host_sid"]
+        if not host_sid:
+            return None
+        user_info = self._sid_map.get(host_sid)
+        return user_info["user_id"] if user_info else None
 
     def get_active_room_ids(self) -> list:
         return list(self._rooms.keys())
@@ -123,12 +150,12 @@ class RoomManager:
                 return True
         return False
 
-    def get_skip_votes(self, room_id: str) -> int:
+    def reset_skip_votes(self, room_id: str):
+        """Reset skip votes when track changes."""
         if room_id in self._rooms:
             pb = self._rooms[room_id].get("playback")
             if pb:
-                return len(pb.get("skip_voters", set()))
-        return 0
+                pb["skip_voters"] = set()
 
 
 room_manager = RoomManager()

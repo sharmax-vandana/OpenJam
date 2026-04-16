@@ -43,6 +43,8 @@ class SocketClient {
       'playback_sync', 'track_changed',
       'listener_count', 'room_closed',
       'name_updated', 'skip_votes_updated',
+      'reaction_received',
+      'host_changed',
     ];
     events.forEach(event => {
       this.socket.on(event, (data) => {
@@ -96,6 +98,11 @@ class SocketClient {
   nextTrack() {
     if (!this._ready()) return;
     this.socket.emit('next_track', { room_id: this.roomId });
+  }
+
+  sendReaction(emoji) {
+    if (!this._ready()) return;
+    this.socket.emit('send_reaction', { room_id: this.roomId, emoji });
   }
 
   updatePlayback(data) {

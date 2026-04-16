@@ -155,12 +155,14 @@ def register_playback_handlers(sio: socketio.AsyncServer):
         if added:
             votes = room_manager.get_skip_votes(room_id)
             listeners = room_manager.get_listener_count(room_id)
-            if listeners > 0 and (votes / listeners) > 0.5:
+            threshold = 0.65  # 65% of active listeners
+            if listeners > 0 and (votes / listeners) >= threshold:
                 # threshold reached, skip!
                 await next_track(sid, {"room_id": room_id})
             else:
                 # broadcast vote update
-                await sio.emit("skip_votes_updated", {"votes": votes, "required": (listeners // 2) + 1}, room=room_id)
+                required = max(1, int(listeners * threshold) + 1)  # Ceiling of 65%
+                await sio.emit("skip_votes_updated", {"votes": votes, "required": required}, room=room_id)
 
     @sio.event
     async def next_track(sid, data):
@@ -195,11 +197,15 @@ def register_playback_handlers(sio: socketio.AsyncServer):
                 duration_ms=next_item.get("duration_ms", 0),
                 is_playing=True,
             )
+            # Reset skip votes for new track
+            room_manager.reset_skip_votes(room_id)
             ensure_sync_loop(room_id, sio)
             await sio.emit("track_changed", next_item, room=room_id)
         else:
             stop_sync_loop(room_id)
             room_manager.update_playback(room_id, "", "", "", "", 0, 0, False)
+            # Reset skip votes when no more tracks
+            room_manager.reset_skip_votes(room_id)
             await sio.emit("track_changed", None, room=room_id)
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)

@@ -83,13 +83,34 @@ def register_connection_handlers(sio: socketio.AsyncServer):
         if info:
             room_id = info["room_id"]
             session = await sio.get_session(sid)
+            user_id = info["user_id"]
+            display_name = session.get("display_name", "Jammer") if session else "Jammer"
+            
+            # Check if the leaving user was the host
+            was_host = room_manager.is_host(room_id, sid)
+            
             await sio.emit("user_left", {
-                "user_id": info["user_id"],
-                "display_name": session.get("display_name", "Jammer") if session else "Jammer",
+                "user_id": user_id,
+                "display_name": display_name,
             }, room=room_id)
+            
+            # Reassign host if needed
+            if was_host and room_manager.get_listener_count(room_id) > 0:
+                new_host_sid = room_manager.reassign_host(room_id)
+                if new_host_sid:
+                    new_host_session = await sio.get_session(new_host_sid)
+                    new_host_user_id = room_manager.get_host_user_id(room_id)
+                    await sio.emit("host_changed", {
+                        "new_host_user_id": new_host_user_id,
+                        "new_host_display_name": new_host_session.get("display_name", "Jammer") if new_host_session else "Jammer",
+                    }, room=room_id)
+            
             await sio.emit("listener_count", {
                 "count": room_manager.get_listener_count(room_id),
+                "listeners": room_manager.get_listeners(room_id),
+                "host_user_id": room_manager.get_host_user_id(room_id),
             }, room=room_id)
+            
             if room_manager.get_listener_count(room_id) > 0:
                 if not room_manager.get_host_sid(room_id):
                     schedule_room_close(room_id, sio, SessionLocal, delay=300)
@@ -119,6 +140,26 @@ def register_connection_handlers(sio: socketio.AsyncServer):
         await sio.enter_room(sid, room_id)
         cancel_room_close(room_id)
 
+        # Assign host if none exists (first user or after host left)
+        if not room_manager.get_host_sid(room_id):
+            room_manager.set_host(room_id, sid)
+            # Check if this is the room creator from DB
+            db = SessionLocal()
+            try:
+                from backend.models.room import Room
+                room = db.query(Room).filter(Room.id == room_id).first()
+                if room and room.host_user_id == user_id:
+                    # This is the room creator, they should be host
+                    pass  # already set above
+                elif room_manager.get_listener_count(room_id) == 1:
+                    # First user in room, make them host
+                    pass  # already set above
+                else:
+                    # Reassign to earliest joined user
+                    room_manager.reassign_host(room_id)
+            finally:
+                db.close()
+
         # Offload blocking DB read to a thread pool — event loop stays free
         messages, queue = await asyncio.to_thread(_db_get_join_data, room_id)
 
@@ -137,6 +178,7 @@ def register_connection_handlers(sio: socketio.AsyncServer):
         await sio.emit("listener_count", {
             "count": room_manager.get_listener_count(room_id),
             "listeners": room_manager.get_listeners(room_id),
+            "host_user_id": room_manager.get_host_user_id(room_id),
         }, room=room_id)
 
     @sio.event
@@ -177,6 +219,7 @@ def register_connection_handlers(sio: socketio.AsyncServer):
             await sio.emit("listener_count", {
                 "count": room_manager.get_listener_count(room_id),
                 "listeners": room_manager.get_listeners(room_id),
+                "host_user_id": room_manager.get_host_user_id(room_id),
             }, room=room_id)
 
         await sio.emit("name_updated", {"display_name": new_name}, to=sid)

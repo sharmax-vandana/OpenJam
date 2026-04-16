@@ -83,6 +83,7 @@ def register_queue_handlers(sio: socketio.AsyncServer):
         }
 
         try:
+            logger.info(f"socket add_to_queue room={room_id} user={user_id} uri={track_data['uri']}")
             queue, next_item = await asyncio.to_thread(
                 _db_add_and_get_queue, room_id, track_data, user_id, display_name
             )
@@ -115,6 +116,7 @@ def register_queue_handlers(sio: socketio.AsyncServer):
                 pass  # use the queue we already have
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)
+        logger.info(f"emitted queue_updated room={room_id} count={len(queue)}")
 
     @sio.event
     async def vote_track(sid, data):

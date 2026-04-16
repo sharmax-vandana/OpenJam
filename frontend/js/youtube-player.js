@@ -185,6 +185,13 @@ class YouTubePlayer {
 
     this._suppressStateChange = true;
     this.player.loadVideoById({ videoId, startSeconds });
+    if (this.isPlaying) {
+      setTimeout(() => {
+        if (this.player && this.player.getPlayerState && this.player.getPlayerState() !== YT.PlayerState.PLAYING) {
+          try { this.player.playVideo(); } catch (_) {}
+        }
+      }, 500);
+    }
     setTimeout(() => { this._suppressStateChange = false; }, 1000);
   }
 

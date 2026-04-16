@@ -57,6 +57,7 @@ async def search_tracks(q: str = ""):
 async def get_queue(room_id: str, db: Session = Depends(get_db)):
     """Lightweight queue fetch — used by the frontend 3s poll fallback."""
     queue = queue_manager.get_queue(db, room_id, None)
+    logger.info(f"REST get_queue room={room_id} count={len(queue)}")
     return {"queue": queue}
 
 
