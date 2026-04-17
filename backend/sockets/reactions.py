@@ -1,51 +1,51 @@
-"""Socket.IO emoji reaction handlers — real-time reactions with rate limiting."""
+"""Socket.IO reaction handlers for queue items and chat messages."""
 
-import asyncio
 import socketio
-from datetime import datetime, timezone
+
 from backend.services.room_manager import room_manager
 
 
-# In-memory rate limiting: {user_id: last_reaction_timestamp}
-_reaction_timestamps = {}
+ALLOWED_EMOJIS = {"🔥", "❤️", "😂"}
+_reactions_by_room: dict[str, dict[str, dict[str, list[str]]]] = {}
 
 
 def register_reaction_handlers(sio: socketio.AsyncServer):
 
     @sio.event
-    async def send_reaction(sid, data):
-        """Frontend emits 'send_reaction' with { room_id, emoji }"""
-        session = await sio.get_session(sid)
-        if not session:
+    async def react_to_item(sid, data):
+        room_id = str(data.get("room_id") or "").strip()
+        item_id = str(data.get("item_id") or "").strip()
+        emoji = str(data.get("emoji") or "").strip()
+        user_id = str(data.get("user_id") or "").strip()
+
+        if not room_id or not item_id or not emoji or not user_id:
+            return
+        if emoji not in ALLOWED_EMOJIS:
             return
 
-        room_id = data.get("room_id")
-        emoji = data.get("emoji", "").strip()
-
-        if not room_id or not emoji:
-            return
-
-        # Verify user is in the room
         info = room_manager.get_user_by_sid(sid)
-        if not info or info["room_id"] != room_id:
+        if not info or info.get("room_id") != room_id or info.get("user_id") != user_id:
             return
 
-        user_id = session.get("user_id")
-        if not user_id:
-            return
+        room_reactions = _reactions_by_room.setdefault(room_id, {})
+        item_reactions = room_reactions.setdefault(item_id, {})
+        users = item_reactions.setdefault(emoji, [])
 
-        # Rate limiting: max 1 reaction per 500ms per user
-        now = datetime.now(timezone.utc).timestamp()
-        last_time = _reaction_timestamps.get(user_id, 0)
-        if now - last_time < 0.5:  # 500ms
-            return  # Rate limited
+        if user_id in users:
+            users.remove(user_id)
+            if not users:
+                item_reactions.pop(emoji, None)
+        else:
+            users.append(user_id)
 
-        _reaction_timestamps[user_id] = now
+        if not item_reactions:
+            room_reactions.pop(item_id, None)
 
-        # Broadcast to all users in the room
-        await sio.emit("reaction_received", {
-            "emoji": emoji,
-            "user_id": user_id,
-            "display_name": session.get("display_name", "Jammer"),
-            "timestamp": now,
-        }, room=room_id)
+        await sio.emit(
+            "reaction_updated",
+            {
+                "item_id": item_id,
+                "reactions": room_reactions.get(item_id, {}),
+            },
+            room=room_id,
+        )

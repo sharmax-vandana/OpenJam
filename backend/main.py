@@ -23,21 +23,11 @@ from backend.sockets.reactions import register_reaction_handlers
 setup_logging()
 logger = get_logger(__name__)
 
-# Debug: show CORS origins being used
-logger.info(f"Socket.IO CORS_ALLOWED_ORIGINS: {settings.ALLOWED_ORIGINS}")
-
-# Create custom engineio logger to debug CORS
-import logging as stdlib_logging
-engineio_logger = stdlib_logging.getLogger('engineio')
-engineio_logger.setLevel(stdlib_logging.DEBUG)
-socketio_logger = stdlib_logging.getLogger('socketio')
-socketio_logger.setLevel(stdlib_logging.DEBUG)
-
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=settings.ALLOWED_ORIGINS,
-    logger=True,  # Enable logger to see what's happening
-    engineio_logger=True,  # Enable engineio logger for debugging
+    logger=False,
+    engineio_logger=False,
 )
 
 app = FastAPI(title="Open Jam", version="1.0.0")

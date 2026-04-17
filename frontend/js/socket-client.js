@@ -43,8 +43,7 @@ class SocketClient {
       'playback_sync', 'track_changed',
       'listener_count', 'room_closed',
       'name_updated', 'skip_votes_updated',
-      'reaction_received',
-      'host_changed',
+      'reaction_updated',
     ];
     events.forEach(event => {
       this.socket.on(event, (data) => {
@@ -90,6 +89,16 @@ class SocketClient {
     this.socket.emit('vote_track', { room_id: this.roomId, queue_item_id: queueItemId });
   }
 
+  reactToItem(itemId, emoji, userId) {
+    if (!this._ready()) return;
+    this.socket.emit('react_to_item', {
+      room_id: this.roomId,
+      item_id: itemId,
+      emoji,
+      user_id: userId,
+    });
+  }
+
   requestSync() {
     if (!this._ready()) return;
     this.socket.emit('sync_request', { room_id: this.roomId });
@@ -98,11 +107,6 @@ class SocketClient {
   nextTrack() {
     if (!this._ready()) return;
     this.socket.emit('next_track', { room_id: this.roomId });
-  }
-
-  sendReaction(emoji) {
-    if (!this._ready()) return;
-    this.socket.emit('send_reaction', { room_id: this.roomId, emoji });
   }
 
   updatePlayback(data) {

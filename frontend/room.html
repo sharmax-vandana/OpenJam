@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://www.youtube.com">
   <link rel="preconnect" href="https://www.googleapis.com">
 
-  <link rel="stylesheet" href="/static/css/style.css?v=4">
+  <link rel="stylesheet" href="/static/css/style.css?v=6">
 </head>
 <body>
   <!-- Dynamic Audio-Visual Backdrop -->
@@ -127,8 +127,12 @@
       <div class="controls-locked" id="controls-locked">
         <button class="btn-vote-skip" id="btn-vote-skip">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg>
-          Vote to Skip (0/0)
+          <span id="skip-btn-label">Vote to Skip</span>
         </button>
+        <div class="skip-vote-meter" id="skip-vote-meter">
+          <div class="skip-vote-text" id="skip-vote-text">0 / 1 votes</div>
+          <div class="skip-vote-bar"><div class="skip-vote-fill" id="skip-vote-fill"></div></div>
+        </div>
       </div>
     </div>
 
@@ -141,17 +145,18 @@
       <input type="range" class="vol-slider" id="vol-slider" min="0" max="100" value="80">
       <span class="vol-pct" id="vol-pct">80%</span>
     </div>
-
-    <!-- Emoji Reactions -->
-    <div class="reactions-row">
-      <div class="reaction-buttons" id="reaction-buttons">
-        <button class="reaction-btn" data-emoji="🔥">🔥</button>
-        <button class="reaction-btn" data-emoji="❤️">❤️</button>
-        <button class="reaction-btn" data-emoji="😂">😂</button>
-        <button class="reaction-btn" data-emoji="👏">👏</button>
-        <button class="reaction-btn" data-emoji="😮">😮</button>
-        <button class="reaction-btn" data-emoji="😢">😢</button>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;">
+      <button class="btn btn-secondary" id="btn-inactive-mode" type="button" style="font-size:12px;padding:8px 12px;">Inactive Mode</button>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <select class="input-field" id="sleep-duration" style="min-width:112px;padding:8px 12px;font-size:12px;">
+          <option value="">Sleep Mode</option>
+          <option value="5">5 min</option>
+          <option value="10">10 min</option>
+          <option value="15">15 min</option>
+        </select>
+        <button class="btn btn-ghost" id="btn-sleep-mode" type="button" style="font-size:12px;padding:8px 12px;">Start Sleep</button>
       </div>
+      <div id="local-mode-status" aria-live="polite" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text-3);min-height:18px;"></div>
     </div>
 
     <!-- Hidden YouTube player -->
@@ -274,32 +279,6 @@ function toast(msg,type='info'){
 }
 function toggleMembers(){ $('#members-panel')?.classList.toggle('collapsed'); }
 
-/* ── Reaction System ───────────────────────────────────── */
-let lastReactionTime = 0;
-function showFloatingReaction(emoji) {
-  const container = $('#panel-left'); // Float over the Now Playing section
-  if (!container) return;
-
-  const reaction = document.createElement('div');
-  reaction.className = 'floating-reaction';
-  reaction.textContent = emoji;
-
-  // Random horizontal position within the container
-  const containerRect = container.getBoundingClientRect();
-  const randomX = Math.random() * (containerRect.width - 100) + 50; // Keep within bounds
-  reaction.style.left = `${randomX}px`;
-  reaction.style.top = `${20 + Math.random() * 40}px`;
-
-  container.appendChild(reaction);
-
-  // Auto-remove after animation completes (3 seconds)
-  setTimeout(() => {
-    if (reaction.parentNode) {
-      reaction.remove();
-    }
-  }, 3000);
-}
-
 /* ── Mobile tab switching ──────────────────────────────────── */
 let _mobUnread = 0;
 function switchMobileTab(tab) {
@@ -357,16 +336,26 @@ function _mobMarkUnread() {
 (async () => {
   const YTKEY = window.YOUTUBE_API_KEY || '';
   const roomId = (location.pathname.match(/\/room\/([^/]+)/) || [])[1];
-  console.log('[QUEUE-DEBUG] roomId from URL:', roomId, 'pathname:', location.pathname);
-  if(!roomId){ console.error('[QUEUE-DEBUG] no roomId found'); location.href='/'; return; }
+  if(!roomId){ location.href='/'; return; }
 
   let me = null;          // current user object
   let roomData = null;    // full room data
-  let isHost = false;     // am I the room host?
-  let currentHostUserId = null; // current host user ID
+  let isHost = false;     // am I the room creator?
   let muted = false;
   let vol = 80;
   let _currentTrackUri = null; // track when URI truly changes to avoid reload loops
+  let skipVoteCooldown = false;
+  let inactiveMode = false;
+  let suppressPlaybackSocketEvents = false;
+  let awaitingInactiveResync = false;
+  let sleepTimerId = null;
+  let sleepActive = false;
+  let sleepEndsAt = null;
+  let sleepStartedAt = null;
+  let sleepDurationMs = 0;
+  let sleepInitialVolume = 0;
+  const REACTION_EMOJIS = ['🔥', '❤️', '😂'];
+  const reactionState = {};
 
   /* ─── YouTube Player & Lyrics ────────────────────────── */
   const yt = new YouTubePlayer();
@@ -381,11 +370,167 @@ function _mobMarkUnread() {
   });
 
   $('#btn-vote-skip')?.addEventListener('click', () => {
+    if(skipVoteCooldown || !_currentTrackUri) return;
+    skipVoteCooldown = true;
     sc.emit('vote_skip', { room_id: roomId });
-    $('#btn-vote-skip').disabled = true;
+    setTimeout(()=>{ skipVoteCooldown = false; }, 500);
+  });
+
+  function runLocalPlaybackAction(fn){
+    suppressPlaybackSocketEvents = true;
+    try { fn(); } catch(_) {}
+    setTimeout(()=>{ suppressPlaybackSocketEvents = false; }, 1200);
+  }
+
+  function formatCountdown(ms){
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function sleepModeActive(){
+    return sleepActive && !!sleepEndsAt && !!sleepTimerId;
+  }
+
+  function updateLocalModeStatus(){
+    const inactiveBtn = $('#btn-inactive-mode');
+    const sleepBtn = $('#btn-sleep-mode');
+    const sleepSelect = $('#sleep-duration');
+    const status = $('#local-mode-status');
+
+    if(inactiveBtn){
+      inactiveBtn.textContent = inactiveMode ? 'Resume Sync' : 'Inactive Mode';
+      inactiveBtn.classList.toggle('btn-primary', inactiveMode);
+      inactiveBtn.classList.toggle('btn-secondary', !inactiveMode);
+    }
+    if(sleepBtn) sleepBtn.textContent = sleepModeActive() ? 'Cancel Sleep' : 'Start Sleep';
+    if(sleepSelect) sleepSelect.disabled = sleepModeActive();
+
+    if(!status) return;
+    const badges = [];
+    if(inactiveMode){
+      badges.push('<span style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.28);color:var(--amber);font-weight:600;">Inactive Mode On</span>');
+    }
+    if(sleepModeActive()){
+      badges.push(`<span style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);color:var(--text-2);font-weight:500;">Sleep Mode: ${formatCountdown(sleepEndsAt - Date.now())} remaining</span>`);
+    }
+    status.innerHTML = badges.join('');
+  }
+
+  function clearSleepMode(){
+    if(sleepTimerId){
+      clearInterval(sleepTimerId);
+      sleepTimerId = null;
+    }
+    sleepActive = false;
+    sleepEndsAt = null;
+    sleepStartedAt = null;
+    sleepDurationMs = 0;
+    sleepInitialVolume = 0;
+    updateLocalModeStatus();
+  }
+
+  function cancelSleepMode(showToast = true){
+    if(!sleepActive && !sleepTimerId) return;
+    clearSleepMode();
+    if(showToast) toast('Sleep mode cancelled', 'info');
+  }
+
+  function getSleepVolume(){
+    if(!sleepActive || !sleepStartedAt || !sleepDurationMs) return vol;
+    const elapsed = Math.min(sleepDurationMs, Math.max(0, Date.now() - sleepStartedAt));
+    const progress = Math.min(1, elapsed / sleepDurationMs);
+    const eased = 1 - Math.pow(progress, 2);
+    return Math.max(0, Math.round(sleepInitialVolume * eased));
+  }
+
+  function applySleepFade(){
+    if(!sleepActive) return;
+    const remainingMs = sleepEndsAt - Date.now();
+    if(remainingMs <= 0){
+      finishSleepMode();
+      return;
+    }
+    const nextVolume = getSleepVolume();
+    muted = nextVolume === 0;
+    applyVol(nextVolume);
+    updateLocalModeStatus();
+  }
+
+  function finishSleepMode(){
+    clearSleepMode();
+    muted = true;
+    applyVol(0);
+    runLocalPlaybackAction(() => {
+      if(yt._ready && yt.player?.pauseVideo) yt.player.pauseVideo();
+      yt.isPlaying = false;
+      yt.stopProgressTimer?.();
+      yt.updateDisplay?.();
+    });
+    toast('Sleep mode complete', 'info');
+  }
+
+  function startSleepMode(minutes){
+    clearSleepMode();
+    sleepActive = true;
+    sleepInitialVolume = Math.max(0, vol);
+    sleepDurationMs = minutes * 60 * 1000;
+    sleepStartedAt = Date.now();
+    sleepEndsAt = sleepStartedAt + sleepDurationMs;
+
+    sleepTimerId = setInterval(() => {
+      applySleepFade();
+    }, 250);
+
+    applySleepFade();
+    updateLocalModeStatus();
+    toast(`Sleep mode started for ${minutes} minutes`, 'info');
+  }
+
+  function setInactiveMode(enabled){
+    if(inactiveMode === enabled) return;
+    inactiveMode = enabled;
+
+    if(inactiveMode){
+      awaitingInactiveResync = false;
+      clearInterval(progressInterval);
+      progressInterval = null;
+      runLocalPlaybackAction(() => {
+        if(yt._ready && yt.player?.pauseVideo) yt.player.pauseVideo();
+        yt.isPlaying = false;
+        yt.stopProgressTimer?.();
+        yt.updateDisplay?.();
+      });
+      toast('Inactive mode enabled', 'info');
+    } else {
+      awaitingInactiveResync = true;
+      sc.requestSync();
+      toast('Sync resumed', 'success');
+    }
+
+    updateLocalModeStatus();
+  }
+
+  $('#btn-inactive-mode')?.addEventListener('click', () => {
+    setInactiveMode(!inactiveMode);
+  });
+
+  $('#btn-sleep-mode')?.addEventListener('click', () => {
+    if(sleepModeActive()){
+      cancelSleepMode();
+      return;
+    }
+    const minutes = parseInt($('#sleep-duration')?.value || '', 10);
+    if(!minutes){
+      toast('Choose a sleep duration first', 'error');
+      return;
+    }
+    startSleepMode(minutes);
   });
 
   yt.setControlCallback((action, extra={}) => {
+    if(inactiveMode || suppressPlaybackSocketEvents) return;
     if(!isHost) return; // only host fires socket events
     const pos = extra.position_ms ?? yt.positionMs;
     const payload = {
@@ -409,48 +554,46 @@ function _mobMarkUnread() {
   /* ─── Socket ─────────────────────────────────────────── */
   const sc = new SocketClient();
   sc.on('skip_votes_updated', d => {
-    const btn = $('#btn-vote-skip');
-    if(btn) btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg> Vote to Skip (${d.votes}/${d.required})`;
-  });
-
-  sc.on('host_changed', d => {
-    toast(`${d.new_host_display_name} is now the host`, 'info');
-    // Update UI to reflect new host
-    applyHostUI();
+    updateSkipVoteUI(d);
   });
 
   sc.on('playback_sync',  d => {
-    if (!d?.track_uri) return;
-    console.debug('playback_sync', d, 'currentVideoId', yt.currentVideoId, 'isPlaying', yt.isPlaying);
-    if (!yt.currentVideoId || yt.currentVideoId !== d.track_uri) {
-      // Load the current track for all listeners if not already loaded.
+    if(inactiveMode) return;
+    if(awaitingInactiveResync){
+      awaitingInactiveResync = false;
       updateNP(d);
-    } else {
-      updateNPDisplay(d);
+      if(d?.track_uri){
+        yt.syncPosition(d.position_ms || 0, d.is_playing);
+      }
+      return;
     }
-    const serverPos = d.position_ms || 0;
-    const clientPos = yt.positionMs || 0;
-    const drift = Math.abs(serverPos - clientPos);
-    if (drift > 3000 || (d.is_playing && !yt.isPlaying)) {
-      yt.syncPosition(serverPos, d.is_playing);
+    if (d?.track_uri) {
+      if (!isHost) {
+        // Update DISPLAY only (title/art/progress) — never re-loads the YT player
+        updateNPDisplay(d);
+        // Only hard-resync YT position if drift is significant (>3s)
+        const serverPos = d.position_ms || 0;
+        const clientPos = yt.positionMs || 0;
+        const drift = Math.abs(serverPos - clientPos);
+        if (drift > 3000) {
+          yt.syncPosition(serverPos, d.is_playing);
+        }
+      }
     }
   });
   sc.on('track_changed',  d => {
-    console.debug('track_changed', d);
+    if(inactiveMode) return;
     updateNP(d); // Full update — loads new track into YT
     if(d) toast(`▶ ${d.track_name}`, 'success');
   });
-  sc.on('queue_updated',  d => {
-    console.log('[QUEUE-DEBUG] socket queue_updated event:', d);
-    if (!Array.isArray(d?.queue)) {
-      console.error('[QUEUE-DEBUG] queue_updated but d.queue is not array!', typeof d?.queue, d?.queue);
-      return;
-    }
-    console.log('[QUEUE-DEBUG] queue_updated has', d.queue.length, 'items, calling renderQueue()');
-    renderQueue(d.queue);
-  });
+  sc.on('queue_updated',  d => renderQueue(d.queue));
   sc.on('chat_message',   d => addChat(d));
   sc.on('chat_history',   d => { if(d.messages?.length) d.messages.forEach(addChat); });
+  sc.on('reaction_updated', d => {
+    if(!d?.item_id) return;
+    reactionState[d.item_id] = d.reactions || {};
+    renderReactionBar(d.item_id);
+  });
   sc.on('listener_count', d => {
     // Server sends either { listeners: [...] } or { count: N } or both
     const barNum = $('#bar-lc-num');
@@ -461,17 +604,12 @@ function _mobMarkUnread() {
     const mobTab = $('#mob-tab-members');
     if(mobTab){ const lbl = mobTab.querySelector('.mob-tab-label'); if(lbl) lbl.textContent = count > 0 ? `People (${count})` : 'People'; }
     if(d.listeners) updateMembers(d.listeners);
-    if(d.host_user_id) {
-      currentHostUserId = d.host_user_id;
-      applyHostUI();
-    }
   });
 
   sc.on('user_joined',    d => toast(`${d.display_name} joined`, 'info'));
   sc.on('user_left',      d => toast(`${d.display_name} left`, 'info'));
   sc.on('room_closed',    d => { toast(d?.reason || 'Room closed', 'info'); setTimeout(()=>location.href='/', 2500); });
   sc.on('queue_error',    d => toast(d.message || 'Action blocked', 'error'));
-  sc.on('reaction_received', d => showFloatingReaction(d.emoji));
 
   /* ─── Auth ───────────────────────────────────────────── */
   async function checkAuth(){
@@ -502,8 +640,7 @@ function _mobMarkUnread() {
     $('#bar-host').textContent = `Hosted by ${room.host_name || 'Unknown'}`;
     $('#room-bar').style.display = 'flex';
 
-    // Set initial host (may be updated by listener_count event)
-    currentHostUserId = room.host_user_id;
+    isHost = !!(me && room.host_user_id === me.id);
     applyHostUI();
 
     if(room.current_track) updateNP(room.current_track);
@@ -512,7 +649,6 @@ function _mobMarkUnread() {
   }
 
   function applyHostUI(){
-    isHost = me && currentHostUserId === me.id;
     if(isHost){
       $('#btn-close').style.display = 'inline-flex';
       $('#controls-row').style.display = 'flex';
@@ -529,6 +665,7 @@ function _mobMarkUnread() {
   let progressInterval = null;
 
   function updateNPDisplay(track){
+    if(inactiveMode) return;
     // Lightweight — update title/art/progress only. Does NOT reload YT player.
     const artImg = $('#art-img');
     const vinyl  = $('#art-vinyl');
@@ -552,6 +689,7 @@ function _mobMarkUnread() {
   }
 
   function updateNP(track){
+    if(inactiveMode) return;
     // Full update — updates display AND loads a new track into YT if URI changed.
     const artImg = $('#art-img');
     const vinyl  = $('#art-vinyl');
@@ -571,8 +709,10 @@ function _mobMarkUnread() {
       const ph = $('#art-placeholder'); if(ph) ph.classList.remove('hidden');
       setPlayIcon(false);
       clearInterval(progressInterval);
+      progressInterval = null;
       $('#progress').style.width='0%';
       $('#time-cur').textContent='0:00'; $('#time-dur').textContent='0:00';
+      updateSkipVoteUI({votes:0, threshold:1, percentage:0, voter_ids:[]});
       return;
     }
 
@@ -592,21 +732,22 @@ function _mobMarkUnread() {
     if(eq) eq.style.display = playing ? 'flex' : 'none';
     setPlayIcon(playing);
 
-    const btnSkip = $('#btn-vote-skip');
-    if(btnSkip) {
-        btnSkip.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5-6 8.5 6V6l-8.5 6z"/></svg> Vote to Skip (0/0)`;
-        btnSkip.disabled = false;
-    }
-
     // Only reload YT player when the actual video ID changes
     if(track.track_uri !== _currentTrackUri){
       _currentTrackUri = track.track_uri;
       yt.setTrack({ track_uri:track.track_uri, position_ms:track.position_ms||0, duration_ms:track.duration_ms||0, is_playing:playing });
       lyricsManager.loadLyrics(track.track_name, track.artist, track.track_uri);
+      if(sleepActive){
+        setTimeout(() => {
+          if(sleepActive) applySleepFade();
+        }, 150);
+      }
     }
+    updateSkipVoteUI({votes:0, threshold:1, percentage:0, voter_ids:[]});
 
     // Progress ticker
     clearInterval(progressInterval);
+    progressInterval = null;
     let pos = track.position_ms || 0;
     const dur = track.duration_ms || 0;
     updateProgress(pos, dur);
@@ -619,6 +760,7 @@ function _mobMarkUnread() {
   }
 
   function updateProgress(pos, dur){
+    if(inactiveMode) return;
     $('#time-cur').textContent = fmt(pos);
     $('#time-dur').textContent = fmt(dur);
     $('#progress').style.width = dur ? `${(pos/dur)*100}%` : '0%';
@@ -631,18 +773,33 @@ function _mobMarkUnread() {
     if(pa) pa.style.display = playing ? 'block' : 'none';
   }
 
+  function updateSkipVoteUI(data={}){
+    const votes = data.votes || 0;
+    const threshold = data.threshold || 1;
+    const percentage = Math.max(0, Math.min(100, data.percentage || 0));
+    const hasVoted = !!(me && Array.isArray(data.voter_ids) && data.voter_ids.includes(me.id));
+    const btn = $('#btn-vote-skip');
+    const label = $('#skip-btn-label');
+    const text = $('#skip-vote-text');
+    const fill = $('#skip-vote-fill');
+
+    if(btn){
+      btn.classList.toggle('voted', hasVoted);
+      btn.disabled = !_currentTrackUri;
+    }
+    if(label) label.textContent = hasVoted ? 'Remove Skip Vote' : 'Vote to Skip';
+    if(text) text.textContent = `🔥 ${percentage}% voted (${votes} / ${threshold})`;
+    if(fill) fill.style.width = `${percentage}%`;
+  }
+
   /* ─── Queue ──────────────────────────────────────────── */
   function renderQueue(q){
     const list = $('#queue-list');
-    if(!list) { console.error('[QUEUE-DEBUG] renderQueue but no #queue-list element!'); return; }
-    console.log('[QUEUE-DEBUG] renderQueue called with q:', q);
+    if(!list) return;
     const allItems = (q||[]).filter(i => i.status !== 'played');
-    console.log('[QUEUE-DEBUG] after filter, allItems.length:', allItems.length);
-    const countEl = $('#q-count');
-    if(countEl) countEl.textContent = `${allItems.length} track${allItems.length !== 1 ? 's' : ''}`;
+    $('#q-count').textContent = `${allItems.length} track${allItems.length !== 1 ? 's' : ''}`;
 
     if(!allItems.length){
-      console.log('[QUEUE-DEBUG] queue empty, showing empty state');
       list.innerHTML = `
         <div class="empty" id="q-empty">
           <svg class="empty-icon-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
@@ -656,7 +813,6 @@ function _mobMarkUnread() {
     const playing = allItems.filter(i => i.status === 'playing');
     const queued  = allItems.filter(i => i.status !== 'playing');
     const ordered = [...playing, ...queued];
-    console.log('[QUEUE-DEBUG] rendering', ordered.length, 'items (playing:', playing.length, 'queued:', queued.length + ')');
 
     list.innerHTML = ordered.map((item, idx) => {
       const isPlaying = item.status === 'playing';
@@ -677,6 +833,7 @@ function _mobMarkUnread() {
             ${dur ? `<span class="queue-item-dur">${dur}</span>` : ''}
             <span class="queue-item-by">${esc(item.added_by_name || 'Unknown')}</span>
           </div>
+          <div class="reactions" id="${reactionBarId(item.id)}" data-item-id="${esc(item.id)}"></div>
         </div>
         ${isPlaying
           ? `<div class="eq"><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div></div>`
@@ -686,8 +843,43 @@ function _mobMarkUnread() {
              </button>`}
       </div>`;
     }).join('');
+    ordered.forEach(item => renderReactionBar(item.id));
   }
   window.doVote = id => sc.emit('vote_track', { room_id: roomId, queue_item_id: id });
+
+  function reactionBarId(itemId){
+    return `react-${String(itemId || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  }
+
+  function renderReactionBar(itemId){
+    const el = document.getElementById(reactionBarId(itemId));
+    if(!el) return;
+
+    const reactions = reactionState[itemId] || {};
+    const activeEmojis = REACTION_EMOJIS.filter(emoji => (reactions[emoji] || []).length);
+    const pickerEmojis = REACTION_EMOJIS.filter(emoji => !activeEmojis.includes(emoji));
+
+    const activeHtml = activeEmojis.map(emoji => {
+      const users = reactions[emoji] || [];
+      const reacted = !!(me && users.includes(me.id));
+      return `<button class="reaction-pill reaction-btn${reacted ? ' reacted' : ''}" data-item-id="${esc(itemId)}" data-emoji="${esc(emoji)}" type="button">${esc(emoji)} ${users.length}</button>`;
+    }).join('');
+
+    const pickerHtml = pickerEmojis.map(emoji =>
+      `<button class="reaction-choice reaction-btn" data-item-id="${esc(itemId)}" data-emoji="${esc(emoji)}" type="button" aria-label="React ${esc(emoji)}">${esc(emoji)}</button>`
+    ).join('');
+
+    el.innerHTML = `
+      <div class="reaction-pills">${activeHtml}</div>
+      ${pickerHtml ? `<div class="reaction-picker">${pickerHtml}</div>` : ''}
+    `;
+  }
+
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.reaction-btn');
+    if(!btn || !me) return;
+    sc.reactToItem(btn.dataset.itemId, btn.dataset.emoji, me.id);
+  });
 
   /* ─── Members ────────────────────────────────────────── */
   function updateMembers(listeners){
@@ -730,6 +922,44 @@ function _mobMarkUnread() {
   /* ─── Track Search ───────────────────────────────────── */
   const qSearch = $('#q-search');
   const srEl = $('#search-results');
+  const SEARCH_CACHE_KEY = 'openjam_track_search_cache';
+  const SEARCH_CACHE_TTL = 300000;
+  let currentQuery = '';
+  let lastQuery = '';
+  let activeSearchController = null;
+  function normalizeSearchQuery(query){
+    return String(query || '').trim().toLowerCase();
+  }
+  function readSearchCache(){
+    try {
+      const raw = localStorage.getItem(SEARCH_CACHE_KEY);
+      if(!raw) return {};
+      const cache = JSON.parse(raw);
+      return cache && typeof cache === 'object' ? cache : {};
+    } catch(e) {
+      try { localStorage.removeItem(SEARCH_CACHE_KEY); } catch(_) {}
+      return {};
+    }
+  }
+  function writeSearchCache(cache){
+    try {
+      localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(cache));
+    } catch(e) {}
+  }
+
+  function openSearchDropdown(){
+    srEl?.classList.add('open');
+  }
+
+  function closeSearchDropdown(){
+    activeSearchController?.abort();
+    activeSearchController = null;
+    currentQuery = '';
+    lastQuery = '';
+    if(!srEl) return;
+    srEl.classList.remove('open');
+    srEl.innerHTML = '';
+  }
 
   // Check if guest is allowed to add to queue (Party Mode vs Dictator)
   function checkQueuePermissions() {
@@ -746,21 +976,43 @@ function _mobMarkUnread() {
 
 
 
-  async function searchTracks(q){
-    const r = await fetch(`/search/tracks?q=${encodeURIComponent(q)}`, { credentials:'include' });
-    if(!r.ok) return [];
-    return (await r.json()).tracks || [];
+  async function searchTracks(q, signal){
+    const query = normalizeSearchQuery(q);
+    if(!query) return [];
+    const cache = readSearchCache();
+    const cached = cache[query];
+    if(cached){
+      if(Array.isArray(cached.results) && typeof cached.timestamp === 'number' && Date.now() - cached.timestamp < SEARCH_CACHE_TTL){
+        return cached.results;
+      }
+      delete cache[query];
+      writeSearchCache(cache);
+    }
+    try {
+      const r = await fetch(`/search/tracks?q=${encodeURIComponent(query)}`, {
+        credentials:'include',
+        signal
+      });
+      if(!r.ok) return [];
+      const tracks = (await r.json()).tracks || [];
+      const nextCache = readSearchCache();
+      nextCache[query] = { results: tracks, timestamp: Date.now() };
+      writeSearchCache(nextCache);
+      return tracks;
+    } catch (e) {
+      if(e.name === 'AbortError') return;
+      console.error(e);
+      return [];
+    }
   }
   async function resolveYTServerSide(query){
     // Server-side resolve: API key stays hidden, returns video ID
     try {
-      console.log('[QUEUE-DEBUG] resolveYT query:', query);
       const r = await fetch(`/search/resolve?q=${encodeURIComponent(query)}`, { credentials:'include' });
-      if(!r.ok) { console.warn('[QUEUE-DEBUG] resolveYT response not ok:', r.status); return null; }
+      if(!r.ok) return null;
       const d = await r.json();
-      console.log('[QUEUE-DEBUG] resolveYT response:', d);
       return d.video_id || null;
-    } catch(e) { console.error('[QUEUE-DEBUG] resolveYT error:', e); return null; }
+    } catch(e) { return null; }
   }
 
   async function loadRecommendations(){
@@ -776,7 +1028,7 @@ function _mobMarkUnread() {
       srEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">
         <div style="font-size:24px;margin-bottom:6px">🔍</div>No results found
       </div>`;
-      srEl.classList.add('open');
+      openSearchDropdown();
       return;
     }
     if(label){
@@ -805,69 +1057,61 @@ function _mobMarkUnread() {
           <div class="add-btn">+</div>
         </div>`).join('');
     }
-    srEl.classList.add('open');
+    openSearchDropdown();
   }
 
-  // Use event delegation on srEl — survives innerHTML replacements
+  // Use event delegation on srEl - survives innerHTML replacements
   srEl.addEventListener('click', async (e)=>{
     const item = e.target.closest('.search-result-item');
     if(!item) return;
-    srEl.classList.remove('open');
+    closeSearchDropdown();
     qSearch.value='';
-    // Show inline spinner
-    srEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px">
-      <span style="display:inline-block;width:12px;height:12px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite"></span>
-      Finding on YouTube…
-    </div>`;
-    srEl.classList.add('open');
     const vid = await resolveYTServerSide(item.dataset.uri);
-    srEl.classList.remove('open');
     if(!vid){
-      console.warn('[QUEUE-DEBUG] No video ID resolved for:', item.dataset.uri);
-      toast('Not found on YouTube — try a different search 🙄','error');
+      toast('Not found on YouTube - try a different search','error');
       return;
     }
-    const payload = {
+    sc.emit('add_to_queue', {
       room_id:roomId,
       track_uri: vid,
       track_name: item.dataset.name,
       artist: item.dataset.artist,
       album_art_url: item.dataset.art,
       duration_ms: parseInt(item.dataset.dur)||0
-    };
-    console.log('[QUEUE-DEBUG] emit add_to_queue:', payload);
-    sc.emit('add_to_queue', payload);
-    toast(`➕ Queued: ${item.dataset.name}`, 'success');
+    });
+    toast(`Queued: ${item.dataset.name}`, 'success');
   });
 
-  // Show recommendations on focus when search is empty
-  qSearch?.addEventListener('focus', async ()=>{
-    if(qSearch.value.trim()) return;
-    const recs = await loadRecommendations();
-    if(recs.length) renderSearchResults(recs, '🔥 Trending Now');
+  qSearch?.addEventListener('focus', ()=>{
+    if(!qSearch.value.trim()) closeSearchDropdown();
   });
 
   qSearch?.addEventListener('input', debounce(async e=>{
-    const q = e.target.value.trim();
+    const q = normalizeSearchQuery(e.target.value);
+    currentQuery = q;
     if(!q){
-      // On clear, show recommendations
-      const recs = await loadRecommendations();
-      if(recs.length) renderSearchResults(recs, '🔥 Trending Now');
-      else srEl.classList.remove('open');
+      closeSearchDropdown();
       return;
     }
-    // Show loading skeleton
+    if(q === lastQuery) return;
+    activeSearchController?.abort();
+    activeSearchController = null;
+    const controller = new AbortController();
+    activeSearchController = controller;
+    lastQuery = q;
     srEl.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px">
       <span style="display:inline-block;width:12px;height:12px;border:2px solid var(--amber);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite"></span>
-      Searching…
+      Searching...
     </div>`;
-    srEl.classList.add('open');
-    const tracks = await searchTracks(q);
+    openSearchDropdown();
+    const tracks = await searchTracks(q, controller.signal);
+    if(controller !== activeSearchController || q !== currentQuery) return;
+    activeSearchController = null;
+    if(typeof tracks === 'undefined') return;
     renderSearchResults(tracks);
-  }, 350));
+  }, 300));
 
-  document.addEventListener('click', e=>{ if(!e.target.closest('#q-search-wrap')) srEl.classList.remove('open'); });
-
+  document.addEventListener('click', e=>{ if(!e.target.closest('#q-search-wrap')) closeSearchDropdown(); });
   // Invite button — copy room URL to clipboard
   $('#btn-invite')?.addEventListener('click', ()=>{
     navigator.clipboard.writeText(location.href).then(()=>{
@@ -886,7 +1130,9 @@ function _mobMarkUnread() {
 
   /* ─── Host Controls ──────────────────────────────────── */
   $('#btn-play')?.addEventListener('click', ()=>{
+    if(sleepActive) cancelSleepMode();
     if(!isHost) return;
+    if(inactiveMode){ toast('Inactive mode is on', 'info'); return; }
     const playing = yt.isPlaying;
     if(yt._ready && yt.player){ playing ? yt.player.pauseVideo() : yt.player.playVideo(); }
     setPlayIcon(!playing);
@@ -901,8 +1147,16 @@ function _mobMarkUnread() {
       is_playing: !playing,
     });
   });
-  $('#btn-next')?.addEventListener('click', ()=>{ if(isHost) sc.nextTrack(); });
-  $('#btn-prev')?.addEventListener('click', ()=>{ if(isHost) sc.emit('prev_track', { room_id:roomId }); });
+  $('#btn-next')?.addEventListener('click', ()=>{
+    if(!isHost) return;
+    if(inactiveMode){ toast('Inactive mode is on', 'info'); return; }
+    sc.nextTrack();
+  });
+  $('#btn-prev')?.addEventListener('click', ()=>{
+    if(!isHost) return;
+    if(inactiveMode){ toast('Inactive mode is on', 'info'); return; }
+    sc.emit('prev_track', { room_id:roomId });
+  });
   $('#btn-close')?.addEventListener('click', ()=>{
     const modal = document.getElementById('close-modal');
     modal.style.display = 'flex';
@@ -927,23 +1181,6 @@ function _mobMarkUnread() {
     }
   });
 
-  /* ─── Reaction Buttons ────────────────────────────────── */
-  const reactionButtons = $$('.reaction-btn');
-  reactionButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const now = Date.now();
-      if (now - lastReactionTime < 500) return; // Rate limit: 500ms between reactions
-      lastReactionTime = now;
-
-      const emoji = btn.dataset.emoji;
-      if (emoji) {
-        sc.sendReaction(emoji);
-        // Optional: Show local reaction immediately for better UX
-        showFloatingReaction(emoji);
-      }
-    });
-  });
-
 
 
   /* ─── Volume ─────────────────────────────────────────── */
@@ -953,13 +1190,20 @@ function _mobMarkUnread() {
     $('#vol-pct').textContent = `${v}%`;
     const slider = $('#vol-slider');
     if(slider) slider.style.background = `linear-gradient(to right, var(--amber) ${v}%, var(--bg-elevated) ${v}%)`;
+    if(slider) slider.value = v;
     $('#ico-vol').style.display  = v>0 ? 'block' : 'none';
     $('#ico-mute').style.display = v>0 ? 'none'  : 'block';
   }
-  $('#vol-slider')?.addEventListener('input', e=>{ muted=false; applyVol(+e.target.value); });
+  $('#vol-slider')?.addEventListener('input', e=>{
+    if(sleepActive) cancelSleepMode();
+    muted=false;
+    applyVol(+e.target.value);
+    updateLocalModeStatus();
+  });
   $('#vol-icon')?.addEventListener('click', ()=>{
-    if(muted){ muted=false; applyVol(vol||80); $('#vol-slider').value=vol||80; }
-    else { muted=true; applyVol(0); $('#vol-slider').value=0; }
+    if(muted){ muted=false; applyVol(vol||80); }
+    else { muted=true; applyVol(0); }
+    updateLocalModeStatus();
   });
   const volPoll = setInterval(()=>{ if(yt._ready&&yt.player?.setVolume){ yt.player.setVolume(vol); clearInterval(volPoll); } }, 500);
 
@@ -971,6 +1215,7 @@ function _mobMarkUnread() {
     const isSelf = me && msg.user_id===me.id;
     const el = document.createElement('div');
     el.className = 'chat-message';
+    el.dataset.id = msg.id;
     el.innerHTML = `
       <div class="avatar avatar-sm">${initials(msg.user_name)}</div>
       <div class="chat-msg-body">
@@ -979,8 +1224,10 @@ function _mobMarkUnread() {
           <span class="chat-msg-time">${ago(msg.timestamp)}</span>
         </div>
         <div class="chat-msg-text">${esc(msg.content)}</div>
+        <div class="reactions" id="${reactionBarId(msg.id)}" data-item-id="${esc(msg.id)}"></div>
       </div>`;
     msgs.appendChild(el);
+    renderReactionBar(msg.id);
     msgs.scrollTop = msgs.scrollHeight;
     // Mobile: show unread badge if chat panel is not active
     if (!isSelf) _mobMarkUnread();
@@ -990,25 +1237,20 @@ function _mobMarkUnread() {
   $('#chat-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
 
   /* ─── Queue Poll Fallback ────────────────────────────── */
-  let _lastQueueLen = -1;
-  let _lastQueueSignature = '';
+  let _lastQueueLen = -1; // Track previous count to avoid redundant renders
   async function pollQueue(){
     try {
       const r = await fetch(`/queue/${roomId}`, { credentials:'include' });
-      if(!r.ok) { console.warn('[QUEUE-DEBUG] pollQueue fetch failed:', r.status); return; }
+      if(!r.ok) return;
       const d = await r.json();
-      if(!Array.isArray(d.queue)) { console.error('[QUEUE-DEBUG] pollQueue but d.queue not array:', d.queue); return; }
+      if(!Array.isArray(d.queue)) return;
       const fresh = d.queue.filter(i => i.status !== 'played');
-      const signature = fresh
-        .map(i => `${i.id}:${i.status}:${i.votes}:${i.track_uri}`)
-        .join('|');
-      console.log('[QUEUE-DEBUG] pollQueue count:', fresh.length, 'first item:', fresh[0] ? {id: fresh[0].id, name: fresh[0].track_name, uri: fresh[0].track_uri} : 'none');
-      if(signature !== _lastQueueSignature){
-        _lastQueueSignature = signature;
-        console.log('[QUEUE-DEBUG] queue changed, rendering');
+      // Only re-render if count changed OR first run
+      if(fresh.length !== _lastQueueLen){
+        _lastQueueLen = fresh.length;
         renderQueue(d.queue);
       }
-    } catch(e){ console.error('[QUEUE-DEBUG] pollQueue error:', e); }
+    } catch(_){}
   }
   setInterval(pollQueue, 3000); // Poll every 3s as fallback for missed socket events
 
@@ -1027,10 +1269,17 @@ function _mobMarkUnread() {
     sc.socket.on('connect', () => {
       sc.joinRoom(roomId);
       setTimeout(pollQueue, 500);
+      if(!inactiveMode) sc.requestSync();
     });
   }
 
-  window.addEventListener('beforeunload', ()=>{ sc.leaveRoom(roomId); yt.destroy(); });
+  updateLocalModeStatus();
+
+  window.addEventListener('beforeunload', ()=>{
+    clearSleepMode();
+    sc.leaveRoom(roomId);
+    yt.destroy();
+  });
 })();
 
 </script>

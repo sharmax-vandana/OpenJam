@@ -20,12 +20,10 @@ class Settings:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production")
 
     # CORS configuration
-    ALLOWED_ORIGINS: list = [
-        x.strip() for x in os.getenv(
-            "ALLOWED_ORIGINS",
-            "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000",
-        ).split(",")
-    ]
+    ALLOWED_ORIGINS: list = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:8000",
+    ).split(",")
 
     # Token revocation set (in production, use Redis)
     REVOKED_TOKENS: set = set()

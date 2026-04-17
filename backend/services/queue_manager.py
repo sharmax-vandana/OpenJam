@@ -7,16 +7,6 @@ from backend.models.vote import Vote
 
 class QueueManager:
     def add_track(self, db: Session, room_id: str, track_data: dict, user_id: str, user_name: str) -> QueueItem:
-        # Check queue fairness: limit to 3 songs per user in queue
-        user_track_count = db.query(QueueItem).filter(
-            QueueItem.room_id == room_id,
-            QueueItem.added_by_user_id == user_id,
-            QueueItem.status != "played",
-        ).count()
-        
-        if user_track_count >= 3:
-            raise ValueError("You can only have 3 songs in the queue at a time")
-        
         max_pos = db.query(QueueItem).filter(
             QueueItem.room_id == room_id,
             QueueItem.status != "played",

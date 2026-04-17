@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 class RoomManager:
     def __init__(self):
-        # {room_id: {users: {user_id: {sid, display_name, avatar_url, joined_at}}, host_sid: str, playback: {...}}}
+        # {room_id: {users: {user_id: {sid, display_name, avatar_url}}, host_sid: str, host_user_id: str, playback: {...}}}
         self._rooms: dict = {}
         # {sid: {user_id, room_id}}
         self._sid_map: dict = {}
@@ -15,6 +15,7 @@ class RoomManager:
             self._rooms[room_id] = {
                 "users": {},
                 "host_sid": None,
+                "host_user_id": None,
                 "playback": {
                     "track_uri": None,
                     "track_name": None,
@@ -24,14 +25,12 @@ class RoomManager:
                     "duration_ms": 0,
                     "is_playing": False,
                     "updated_at": None,
-                    "skip_voters": set(),
                 },
             }
         self._rooms[room_id]["users"][user_id] = {
             "sid": sid,
             "display_name": display_name,
             "avatar_url": avatar_url,
-            "joined_at": datetime.now(timezone.utc).isoformat(),
         }
         self._sid_map[sid] = {"user_id": user_id, "room_id": room_id}
 
@@ -50,9 +49,10 @@ class RoomManager:
     def get_user_by_sid(self, sid: str) -> dict | None:
         return self._sid_map.get(sid)
 
-    def set_host(self, room_id: str, sid: str):
+    def set_host(self, room_id: str, sid: str, user_id: str | None = None):
         if room_id in self._rooms:
             self._rooms[room_id]["host_sid"] = sid
+            self._rooms[room_id]["host_user_id"] = user_id
 
     def is_host(self, room_id: str, sid: str) -> bool:
         if room_id in self._rooms:
@@ -77,31 +77,13 @@ class RoomManager:
             for uid, info in self._rooms[room_id]["users"].items()
         ]
 
-    def reassign_host(self, room_id: str) -> str | None:
-        """Reassign host to the earliest joined active user. Returns new host_sid or None."""
+    def get_listeners_with_sid(self, room_id: str) -> list:
         if room_id not in self._rooms:
-            return None
-        
-        users = self._rooms[room_id]["users"]
-        if not users:
-            self._rooms[room_id]["host_sid"] = None
-            return None
-        
-        # Find earliest joined user
-        earliest_user = min(users.items(), key=lambda x: x[1]["joined_at"])
-        new_host_sid = earliest_user[1]["sid"]
-        self._rooms[room_id]["host_sid"] = new_host_sid
-        return new_host_sid
-
-    def get_host_user_id(self, room_id: str) -> str | None:
-        """Get the user_id of the current host."""
-        if room_id not in self._rooms:
-            return None
-        host_sid = self._rooms[room_id]["host_sid"]
-        if not host_sid:
-            return None
-        user_info = self._sid_map.get(host_sid)
-        return user_info["user_id"] if user_info else None
+            return []
+        return [
+            {"user_id": uid, "sid": info["sid"], "display_name": info["display_name"]}
+            for uid, info in self._rooms[room_id]["users"].items()
+        ]
 
     def get_active_room_ids(self) -> list:
         return list(self._rooms.keys())
@@ -112,12 +94,6 @@ class RoomManager:
     def update_playback(self, room_id: str, track_uri: str, track_name: str, artist: str,
                         album_art_url: str, position_ms: int, duration_ms: int, is_playing: bool):
         if room_id in self._rooms:
-            # Carry over old skip voters if the track uri hasn't changed (just a pause/play/seek update)
-            old_pb = self._rooms[room_id].get("playback", {})
-            skip_voters = set()
-            if old_pb and old_pb.get("track_uri") == track_uri:
-                skip_voters = old_pb.get("skip_voters", set())
-
             self._rooms[room_id]["playback"] = {
                 "track_uri": track_uri,
                 "track_name": track_name,
@@ -127,12 +103,11 @@ class RoomManager:
                 "duration_ms": duration_ms,
                 "is_playing": is_playing,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-                "skip_voters": skip_voters,
             }
 
     def get_playback(self, room_id: str) -> dict | None:
         if room_id in self._rooms:
-            return self._rooms[room_id]["playback"]
+            return self._rooms[room_id]["playback"].copy()
         return None
 
     def update_display_name(self, user_id: str, new_name: str):
@@ -140,22 +115,6 @@ class RoomManager:
         for room_data in self._rooms.values():
             if user_id in room_data["users"]:
                 room_data["users"][user_id]["display_name"] = new_name
-
-    def add_skip_vote(self, room_id: str, user_id: str) -> bool:
-        """Returns True if the vote was added, False if already voted."""
-        if room_id in self._rooms:
-            pb = self._rooms[room_id].get("playback")
-            if pb and user_id not in pb.get("skip_voters", set()):
-                pb["skip_voters"].add(user_id)
-                return True
-        return False
-
-    def reset_skip_votes(self, room_id: str):
-        """Reset skip votes when track changes."""
-        if room_id in self._rooms:
-            pb = self._rooms[room_id].get("playback")
-            if pb:
-                pb["skip_voters"] = set()
 
 
 room_manager = RoomManager()

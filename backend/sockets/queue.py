@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 def _db_add_and_get_queue(room_id: str, track_data: dict, user_id: str, display_name: str):
     """Add a track and get current queue — runs in thread pool."""
     from backend.models.room import Room
+    from backend.models.queue_item import QueueItem
     db = SessionLocal()
     try:
         # Check queue mode permissions
@@ -21,6 +22,13 @@ def _db_add_and_get_queue(room_id: str, track_data: dict, user_id: str, display_
             raise ValueError("Room not found")
         if room.queue_mode == "curated" and room.host_user_id != user_id:
             raise ValueError("Queue is locked by host")
+        active_track_count = db.query(QueueItem).filter(
+            QueueItem.room_id == room_id,
+            QueueItem.added_by_user_id == user_id,
+            QueueItem.status != "played",
+        ).count()
+        if active_track_count >= 2:
+            raise ValueError("You can only have 2 songs in the queue")
 
         queue_manager.add_track(db, room_id, track_data, user_id, display_name)
         # Cross-check DB status with live memory to prevent accidental autoplay interrupts
@@ -83,7 +91,6 @@ def register_queue_handlers(sio: socketio.AsyncServer):
         }
 
         try:
-            logger.info(f"socket add_to_queue room={room_id} user={user_id} uri={track_data['uri']}")
             queue, next_item = await asyncio.to_thread(
                 _db_add_and_get_queue, room_id, track_data, user_id, display_name
             )
@@ -106,7 +113,8 @@ def register_queue_handlers(sio: socketio.AsyncServer):
                 duration_ms=next_item.get("duration_ms", 0),
                 is_playing=True,
             )
-            from backend.sockets.playback import ensure_sync_loop
+            from backend.sockets.playback import ensure_sync_loop, reset_skip_votes
+            await reset_skip_votes(room_id, next_item["track_uri"], sio)
             ensure_sync_loop(room_id, sio)
             await sio.emit("track_changed", next_item, room=room_id)
             # Re-fetch queue after auto-advance (no blocking — already in thread)
@@ -116,7 +124,6 @@ def register_queue_handlers(sio: socketio.AsyncServer):
                 pass  # use the queue we already have
 
         await sio.emit("queue_updated", {"queue": queue}, room=room_id)
-        logger.info(f"emitted queue_updated room={room_id} count={len(queue)}")
 
     @sio.event
     async def vote_track(sid, data):
