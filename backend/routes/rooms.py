@@ -91,8 +91,8 @@ async def create_room(request: Request, create_room_req: CreateRoomRequest, db: 
 @router.get("/{room_id}")
 async def get_room(room_id: str, request: Request, db: Session = Depends(get_db)):
     room = db.query(Room).options(selectinload(Room.host)).filter(Room.id == room_id).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
+    if not room or not room.is_active:
+        raise HTTPException(status_code=404, detail="Room not found or closed")
     host_name = room.host.display_name if room.host else "Unknown"
     now_playing = queue_manager.get_now_playing(db, room.id)
     current_user = get_current_user_id(request, include_name=True)
@@ -122,4 +122,8 @@ async def close_room(room_id: str, request: Request, db: Session = Depends(get_d
         raise HTTPException(status_code=403, detail="Only the host can close the room")
     room.is_active = False
     db.commit()
+
+    from backend.main import sio
+    await sio.emit("room_closed", room=room_id)
+
     return {"message": "Room closed"}
