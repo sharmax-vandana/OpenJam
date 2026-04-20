@@ -7,6 +7,8 @@
 
 <br />
 
+> 🚀 **Live Production Demo:** [Add your Render URL here] (e.g., https://openjam-app.onrender.com)
+
 > **Open Jam** democratizes the listening party. Built entirely on a **100% free-tier architecture**, it removes the friction of Spotify OAuth, paid APIs, and user logins. Jump straight into a room, build a queue, and vibe.
 
 ---
