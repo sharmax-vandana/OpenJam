@@ -89,5 +89,5 @@ The app listens on port `8000` inside the container. Point your domain or revers
 
 ---
 <div align="center">
-  <i>Designed & Engineered by <a href="https://github.com/Chaitanyahoon">Chaitanyahoon</a></i>
+  <i>Designed & Engineered by <a href="https://github.com/sharmax-vandana">sharmax-vandana</a></i>
 </div>
