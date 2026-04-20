@@ -60,10 +60,30 @@ python run.py
 
 Open Jam is fully containerized and production-ready out of the box.
 
+**1. Create a production env file**
+```bash
+cp .env.production.example .env.production
+```
+
+Update `.env.production` with your real values:
+```env
+YOUTUBE_API_KEY=your_google_cloud_youtube_data_api_v3_key
+SECRET_KEY=generate_a_long_random_secret
+ALLOWED_ORIGINS=https://your-domain.com
+DATABASE_URL=postgresql://jamgres_user:your_password@dpg-d7j6n4hf9bms738j57sg-a.oregon-postgres.render.com/jamgres?sslmode=require
+```
+
+If you are using a Render external PostgreSQL URL, keep `?sslmode=require` on the connection string.
+
+**2. Start the production container**
 ```bash
 docker-compose -f docker-compose.prod.yml up -d --build
 ```
-*The production `docker-compose.prod.yml` scales SQLite up to an enterprise PostgreSQL instance automatically.*
+*The production `docker-compose.prod.yml` expects a managed PostgreSQL database via `DATABASE_URL`.*
+
+**3. Open the app**
+
+The app listens on port `8000` inside the container. Point your domain or reverse proxy to that port on the machine running Docker.
 
 ---
 <div align="center">

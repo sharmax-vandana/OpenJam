@@ -749,19 +749,8 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
   .btn-primary:hover { transform: none; }
 }
 
-/* ── Tablet: collapse to 2-col ── */
-@media (max-width: 900px) {
-  .room-grid {
-    grid-template-columns: 260px 1fr;
-    grid-template-rows: 1fr;
-    height: calc(100vh - 52px - 48px);
-    overflow: hidden;
-  }
-  .panel-right { display: none; } /* hidden until tab selected on mobile */
-}
-
 /* ── Mobile: full bottom-tab design ── */
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   /* ── Navbar shrink ── */
   .navbar { padding: 0 14px; height: 48px; }
   .navbar-logo { font-size: 15px; }
@@ -816,13 +805,13 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
   .np-times    { display: none; } /* space too tight */
 
   /* ── Mobile playback controls — always visible, thumb-zone sized ── */
-  .controls-row {
-    display: flex !important; /* override the !important hide */
+  .controls-row:not([style*="display: none"]) {
+    display: flex !important;
     padding-bottom: 0;
     gap: 8px;
     flex-shrink: 0;
   }
-  .controls-locked {
+  .controls-locked:not([style*="display: none"]) {
     display: flex !important;
     align-items: center;
     padding-bottom: 0;
@@ -840,8 +829,7 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
   .panel-center.mobile-active,
   .panel-right.mobile-active { display: flex; }
 
-  /* Default: show queue panel */
-  #panel-center { display: flex; }
+  /* Default: show queue panel via JS */
 
   /* ── Queue search — full width, easy tap ── */
   .input-field { padding: 12px 14px; font-size: 14px; } /* 48px height target */

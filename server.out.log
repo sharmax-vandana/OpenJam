@@ -1,0 +1,18 @@
+2026-04-17 13:12:51,684 - uvicorn.error - INFO - Started server process [28472]
+2026-04-17 13:12:51,686 - uvicorn.error - INFO - Waiting for application startup.
+2026-04-17 13:12:51,688 - backend.main - INFO - Starting Open Jam application...
+2026-04-17 13:12:51,688 - backend.main - INFO - Starting Open Jam application...
+2026-04-17 13:12:51,694 - backend.main - INFO - CORS allowed origins: ['http://localhost:3000', 'http://localhost:8000']
+2026-04-17 13:12:51,694 - backend.main - INFO - CORS allowed origins: ['http://localhost:3000', 'http://localhost:8000']
+2026-04-17 13:12:51,695 - backend.main - INFO - Database initialized successfully
+2026-04-17 13:12:51,695 - backend.main - INFO - Database initialized successfully
+2026-04-17 13:12:51,696 - backend.main - INFO - Open Jam startup complete
+2026-04-17 13:12:51,696 - backend.main - INFO - Open Jam startup complete
+2026-04-17 13:12:51,697 - uvicorn.error - INFO - Application startup complete.
+2026-04-17 13:12:51,698 - uvicorn.error - INFO - Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-04-17 13:12:51,821 - uvicorn.error - INFO - ('127.0.0.1', 2927) - "WebSocket /socket.io/?EIO=4&transport=websocket" [accepted]
+2026-04-17 13:12:51,823 - uvicorn.error - INFO - connection open
+2026-04-17 13:12:51,830 - backend.sockets.connection - INFO - Connected _G5vzUmgxL3RVgYHAAAB as 'PIstaG'
+2026-04-17 13:12:51,830 - backend.sockets.connection - INFO - Connected _G5vzUmgxL3RVgYHAAAB as 'PIstaG'
+2026-04-17 13:12:52,370 - uvicorn.access - INFO - 127.0.0.1:2928 - "GET /health HTTP/1.1" 200
+2026-04-17 13:12:52,833 - uvicorn.access - INFO - 127.0.0.1:12866 - "GET /queue/524d7935-4961-44e2-9c64-d62bf6f274cb HTTP/1.1" 200

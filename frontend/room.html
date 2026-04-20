@@ -1274,6 +1274,7 @@ function _mobMarkUnread() {
   }
 
   updateLocalModeStatus();
+  if (window.innerWidth <= 900) switchMobileTab('queue');
 
   window.addEventListener('beforeunload', ()=>{
     clearSleepMode();

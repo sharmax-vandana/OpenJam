@@ -7,6 +7,13 @@ from backend.models.vote import Vote
 
 class QueueManager:
     def add_track(self, db: Session, room_id: str, track_data: dict, user_id: str, user_name: str) -> QueueItem:
+        from backend.models.user import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            user = User(id=user_id, display_name=user_name)
+            db.add(user)
+            db.commit()
+
         max_pos = db.query(QueueItem).filter(
             QueueItem.room_id == room_id,
             QueueItem.status != "played",
@@ -30,6 +37,13 @@ class QueueManager:
         return item
 
     def vote_track(self, db: Session, queue_item_id: str, user_id: str) -> bool:
+        from backend.models.user import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            user = User(id=user_id, display_name="Jammer")
+            db.add(user)
+            db.commit()
+
         existing = db.query(Vote).filter(
             Vote.queue_item_id == queue_item_id,
             Vote.user_id == user_id,

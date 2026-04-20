@@ -9,9 +9,15 @@ from backend.services.room_manager import room_manager
 
 
 def _db_save_message(room_id: str, user_id: str, display_name: str, avatar_url, content: str) -> dict:
-    """Synchronous DB write — runs in a thread pool, never blocks the event loop."""
+    from backend.models.user import User
     db = SessionLocal()
     try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            user = User(id=user_id, display_name=display_name, avatar_url=avatar_url)
+            db.add(user)
+            db.commit()
+
         msg = ChatMessage(
             room_id=room_id,
             user_id=user_id,

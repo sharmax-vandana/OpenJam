@@ -18,6 +18,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
