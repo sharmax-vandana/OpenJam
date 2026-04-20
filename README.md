@@ -85,5 +85,5 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 ---
 <div align="center">
-  <i>Designed & Engineered by <a href="https://github.com/sharmax-vandana">sharmax-vandana</a></i>
+  <i>Designed & Engineered by <a href="https://github.com/sharmax-vandana">Vandana</a></i>
 </div>
