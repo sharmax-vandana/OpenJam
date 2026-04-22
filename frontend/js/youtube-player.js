@@ -42,10 +42,11 @@ class YouTubePlayer {
     if (!container) return;
 
     this.player = new YT.Player('youtube-player-container', {
-      height: '0',
-      width: '0',
+      height: '300',
+      width: '300',
       playerVars: {
-        autoplay: 0,      // We control playback manually after user unlock
+        autoplay: 1,      // We control playback manually after user unlock, but this helps API
+        playsinline: 1,   // Prevent iOS from fullscreening
         controls: 0,
         disablekb: 1,
         fs: 0,
@@ -81,7 +82,6 @@ class YouTubePlayer {
       this._loadVideo(videoId, startSeconds);
     } else if (this._ready && this.player && this.currentVideoId && this.isPlaying) {
       // Already loaded, just unpause
-      if(this.player.unMute) this.player.unMute();
       this.player.playVideo();
       this.startProgressTimer();
     }
@@ -142,6 +142,7 @@ class YouTubePlayer {
 
     // YT.PlayerState: PLAYING=1, PAUSED=2, ENDED=0, BUFFERING=3
     if (state === YT.PlayerState.PLAYING) {
+      try { if (this.player && this.player.unMute) this.player.unMute(); } catch(e) {}
       this.isPlaying = true;
       this._userUnlocked = true;
       this._hideOverlay();
@@ -185,7 +186,6 @@ class YouTubePlayer {
     }
 
     this._suppressStateChange = true;
-    if(this.player.unMute) this.player.unMute();
     this.player.loadVideoById({ videoId, startSeconds });
     setTimeout(() => { this._suppressStateChange = false; }, 1000);
   }
@@ -232,7 +232,6 @@ class YouTubePlayer {
         this.player.seekTo(positionMs / 1000, true);
       }
       if (isPlaying) {
-        if(this.player.unMute) this.player.unMute();
         this.player.playVideo();
         this.startProgressTimer();
       } else {

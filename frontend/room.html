@@ -160,7 +160,7 @@
     </div>
 
     <!-- Hidden YouTube player -->
-    <div id="youtube-player-container" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0"></div>
+    <div id="youtube-player-container" style="position:absolute;width:300px;height:300px;opacity:0.01;pointer-events:none;z-index:-1;"></div>
   </div>
 
   <!-- CENTER — Queue -->
@@ -1133,6 +1133,11 @@ function _mobMarkUnread() {
     if(sleepActive) cancelSleepMode();
     if(!isHost) return;
     if(inactiveMode){ toast('Inactive mode is on', 'info'); return; }
+    
+    if (!yt._userUnlocked) {
+      yt.unlockAudio();
+    }
+    
     const playing = yt.isPlaying;
     if(yt._ready && yt.player){ playing ? yt.player.pauseVideo() : yt.player.playVideo(); }
     setPlayIcon(!playing);
@@ -1187,8 +1192,8 @@ function _mobMarkUnread() {
   function applyVol(v){
     vol = v;
     if(yt._ready && yt.player?.setVolume) {
-      if(v > 0 && yt.player.unMute) yt.player.unMute();
-      yt.player.setVolume(v);
+      try { if(v > 0 && yt.player.unMute) yt.player.unMute(); } catch(e) {}
+      try { yt.player.setVolume(v); } catch(e) {}
     }
     $('#vol-pct').textContent = `${v}%`;
     const slider = $('#vol-slider');
@@ -1208,7 +1213,13 @@ function _mobMarkUnread() {
     else { muted=true; applyVol(0); }
     updateLocalModeStatus();
   });
-  const volPoll = setInterval(()=>{ if(yt._ready&&yt.player?.setVolume){ if(yt.player.unMute) yt.player.unMute(); yt.player.setVolume(vol); clearInterval(volPoll); } }, 500);
+  const volPoll = setInterval(()=>{ 
+    if(yt._ready && yt.player?.setVolume){ 
+      try { if(yt.player.unMute) yt.player.unMute(); } catch(e) {}
+      try { yt.player.setVolume(vol); } catch(e) {}
+      clearInterval(volPoll); 
+    } 
+  }, 500);
 
   /* ─── Chat ───────────────────────────────────────────── */
   function addChat(msg){
