@@ -1186,7 +1186,10 @@ function _mobMarkUnread() {
   /* ─── Volume ─────────────────────────────────────────── */
   function applyVol(v){
     vol = v;
-    if(yt._ready && yt.player?.setVolume) yt.player.setVolume(v);
+    if(yt._ready && yt.player?.setVolume) {
+      if(v > 0 && yt.player.unMute) yt.player.unMute();
+      yt.player.setVolume(v);
+    }
     $('#vol-pct').textContent = `${v}%`;
     const slider = $('#vol-slider');
     if(slider) slider.style.background = `linear-gradient(to right, var(--amber) ${v}%, var(--bg-elevated) ${v}%)`;
@@ -1205,7 +1208,7 @@ function _mobMarkUnread() {
     else { muted=true; applyVol(0); }
     updateLocalModeStatus();
   });
-  const volPoll = setInterval(()=>{ if(yt._ready&&yt.player?.setVolume){ yt.player.setVolume(vol); clearInterval(volPoll); } }, 500);
+  const volPoll = setInterval(()=>{ if(yt._ready&&yt.player?.setVolume){ if(yt.player.unMute) yt.player.unMute(); yt.player.setVolume(vol); clearInterval(volPoll); } }, 500);
 
   /* ─── Chat ───────────────────────────────────────────── */
   function addChat(msg){

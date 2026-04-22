@@ -81,6 +81,7 @@ class YouTubePlayer {
       this._loadVideo(videoId, startSeconds);
     } else if (this._ready && this.player && this.currentVideoId && this.isPlaying) {
       // Already loaded, just unpause
+      if(this.player.unMute) this.player.unMute();
       this.player.playVideo();
       this.startProgressTimer();
     }
@@ -184,6 +185,7 @@ class YouTubePlayer {
     }
 
     this._suppressStateChange = true;
+    if(this.player.unMute) this.player.unMute();
     this.player.loadVideoById({ videoId, startSeconds });
     setTimeout(() => { this._suppressStateChange = false; }, 1000);
   }
@@ -230,6 +232,7 @@ class YouTubePlayer {
         this.player.seekTo(positionMs / 1000, true);
       }
       if (isPlaying) {
+        if(this.player.unMute) this.player.unMute();
         this.player.playVideo();
         this.startProgressTimer();
       } else {
